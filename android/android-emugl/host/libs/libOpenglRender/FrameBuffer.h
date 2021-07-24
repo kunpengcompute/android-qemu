@@ -693,7 +693,7 @@ private:
     std::shared_ptr<YuvDraw<GLESv2Dispatch *>> m_yuvDraw = nullptr;
     EGLConfig  m_eglConfig = nullptr;
     HandleType m_lastPostedColorBuffer = 0;
-    float      m_zRot = 0;
+    static float m_zRot;
     float      m_px = 0;
     float      m_py = 0;
 
