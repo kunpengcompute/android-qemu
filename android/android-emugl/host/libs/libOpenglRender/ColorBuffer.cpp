@@ -676,6 +676,17 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                 if (scissor_test_enabled) {
                     s_gles2.glEnable(GL_SCISSOR_TEST);
                 }
+                if (m_clearFb) {
+                    m_clearFb = false;
+                    // cocos应用有一个不刷新的colorbuffer，在mate30上会导致花屏，因此对特殊处理
+                    // cocos应用第一次flush时清空framebuffer数据,避免花屏
+                    if (RenderThreadInfo::get()->procName == "org.cocos2d.examplecases") {
+                        ERR("is cocos");
+                        s_gles2.glClearColor(0.0, 0.0, 0.0, 0.0);
+                        s_gles2.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        s_gles2.glClear(GL_COLOR_BUFFER_BIT);
+                    }
+                }
                 s_gles2.glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
                         (GLuint)prev_draw_fbo);
 

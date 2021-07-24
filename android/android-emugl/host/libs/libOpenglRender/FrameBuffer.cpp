@@ -836,7 +836,6 @@ bool FrameBuffer::setupSubWindow(EGLNativeWindowType p_window,
     bool success = false;
     if (bindSubwin_locked()) {
         s_gles2.glViewport(0, 0, this->m_guestWidth, this->m_guestHeight);
-        m_zRot = zRot;
         m_subWin = p_window;    
         if (m_lastPostedColorBuffer == 0) {
             s_gles2.glClearColor(1, 1, 1, 0.5);

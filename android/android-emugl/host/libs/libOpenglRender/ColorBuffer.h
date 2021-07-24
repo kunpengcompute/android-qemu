@@ -329,6 +329,7 @@ private:
     GLuint m_buf = 0;
     uint32_t m_displayId = 0;
     bool m_BRSwizzle = false;
+    bool m_clearFb = true;
 };
 
 typedef emugl::SmartPtr<ColorBuffer> ColorBufferPtr;
