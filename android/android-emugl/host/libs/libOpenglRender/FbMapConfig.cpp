@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "FbConfigMy.h"
+#include "FbMapConfig.h"
 
 #include <stdio.h>
 #include <string.h>

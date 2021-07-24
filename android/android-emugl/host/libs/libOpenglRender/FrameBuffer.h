@@ -23,7 +23,7 @@
 
 #include "ColorBuffer.h"
 #include "emugl/common/mutex.h"
-#include "FbConfigMy.h"
+#include "FbMapConfig.h"
 #include "GLESVersionDetector.h"
 #include "Hwc2.h"
 #include "PostWorker.h"
@@ -585,9 +585,6 @@ public:
         } else if (m_zRot == 270) {
             m_zRot = 90;
         }
-    }
-    int getRotation() const {
-        return rotation;
     }
 private:
     FrameBuffer(int p_width, int p_height, unsigned int guestWidth, unsigned int guestHeight, bool useSubWindow);

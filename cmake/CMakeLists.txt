@@ -20,7 +20,7 @@ set(EMUGL_INTERFACE_FILES
 set(OPENGLRENDER_FILES
     ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/TextureDraw.cpp
     ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/FrameBuffer.cpp
-    ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/FbConfigMy.cpp
+    ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/FbMapConfig.cpp
     ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/RenderWindow.cpp
     ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/WindowSurface.cpp
     ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/ColorBuffer.cpp
