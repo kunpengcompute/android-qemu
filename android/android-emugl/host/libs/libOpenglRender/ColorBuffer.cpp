@@ -758,6 +758,7 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
         s_gles2.glViewport(0, 0, m_width, m_height);
         EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, m_fence,
                                                 EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
+        s_egl.eglDestroySyncKHR(m_display, m_fence);
         // render m_blitTex
         m_helper->getTextureDraw()->draw(m_blitTex, 0., 0, 0);
 

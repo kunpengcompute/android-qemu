@@ -7,6 +7,7 @@
 #include "libOpenglRender/FrameBuffer.h"
 #include <map>
 #include <set>
+#include <mutex>
 
 #ifdef __cplusplus
 extern "C" {
@@ -14,11 +15,15 @@ extern "C" {
 
 std::map<uint32_t, int> pidThreads;
 std::set<uint32_t> deletePids;
+std::mutex dataMutex;
 
 void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
 {
-    if (deletePids.find(pid) != deletePids.end()) {
-        ERR("cur process is be deleted, pid:%u, tid:%u", pid, tid);
+    {
+        std::lock_guard<std::mutex> lockGuard(dataMutex);
+        if (deletePids.find(pid) != deletePids.end()) {
+            ERR("cur process is be deleted, pid:%u, tid:%u", pid, tid);
+        }
     }
     RenderThreadInfo *threadInfo = nullptr;
     threadInfo = new (std::nothrow) RenderThreadInfo(pid, tid);
@@ -27,7 +32,10 @@ void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
         return nullptr;
     }
     threadInfo->m_gl2Dec.initGL(gles2_dispatch_get_proc_func, nullptr);
-    pidThreads[pid]++;
+    {
+        std::lock_guard<std::mutex> lockGuard(dataMutex);
+        pidThreads[pid]++;
+    }
     INFO("pid:%u tid:%u is construction", threadInfo->m_pid, threadInfo->m_tid);
     return &threadInfo->m_gl2Dec;
 }
@@ -47,14 +55,22 @@ void rcExitRenderThread()
     FrameBuffer::getFB()->drainWindowSurface();
     FrameBuffer::getFB()->drainRenderContext();
     RenderThreadInfo* curThread = RenderThreadInfo::get();
-    pidThreads[curThread->m_pid]--;
-    if (pidThreads[curThread->m_pid] == 0) {
-        deletePids.insert(curThread->m_pid);
-        FrameBuffer::getFB()->cleanupProcGLObjects(curThread->m_pid);
-    } else if (pidThreads[curThread->m_pid] < 0) {
-        ERR("cur process is be delete to negative, pid:%u, tid:%u", curThread->m_pid, curThread->m_tid);
-    } else {
-        INFO("pid:%u tid:%u is exist", curThread->m_pid, curThread->m_tid);
+    int needCleanPid = 0;
+    {
+        std::lock_guard<std::mutex> lockGuard(dataMutex);
+        pidThreads[curThread->m_pid]--;
+        if (pidThreads[curThread->m_pid] == 0) {
+            deletePids.insert(curThread->m_pid);
+            needCleanPid = curThread->m_pid;
+        } else if (pidThreads[curThread->m_pid] < 0) {
+            ERR("cur process is be delete to negative, pid:%u, tid:%u", curThread->m_pid, curThread->m_tid);
+        } else {
+            INFO("pid:%u tid:%u is exist", curThread->m_pid, curThread->m_tid);
+        }
+    }
+    if (needCleanPid != 0) {
+        INFO("begin clean pid:%u resource", needCleanPid);
+        FrameBuffer::getFB()->cleanupProcGLObjects(needCleanPid);
     }
 }
 
