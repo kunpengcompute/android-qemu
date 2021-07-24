@@ -230,6 +230,7 @@ void FrameBuffer::finalize() {
     }
     m_windows.clear();
     m_contexts.clear();
+    m_yuvDraw = nullptr;
     if (m_eglDisplay != EGL_NO_DISPLAY) {
         s_egl.eglMakeCurrent(m_eglDisplay, NULL, NULL, NULL);
         if (m_eglContext != EGL_NO_CONTEXT) {
@@ -275,6 +276,8 @@ bool FrameBuffer::initialize(int width, int height, unsigned int guest_width, un
         bool egl2egl) {
     GL_LOG("FrameBuffer::initialize");
     if (s_theFrameBuffer != NULL) {
+        delete s_theFrameBuffer;
+        s_theFrameBuffer = nullptr;
         GL_LOG("FrameBuffer Reinitialize");
     }
 
