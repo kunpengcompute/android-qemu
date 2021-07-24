@@ -205,3 +205,10 @@ docker-src.*
 ./output
 ./cmake/build
 android/android-emugl/host/tools/emugen/cmake/build/
+android/android-emugl/host/libs/GLESv2_dec/gles2_server_context.cpp
+android/android-emugl/host/libs/GLESv2_dec/gles2_server_context.h
+android/android-emugl/host/libs/GLESv2_dec/gles2_server_proc.h
+android/android-emugl/host/libs/GLESv2_dec/gles2_dec.cpp
+android/android-emugl/host/libs/GLESv2_dec/gles2_dec.h
+android/android-emugl/host/libs/GLESv2_dec/gles2_opcodes.h
+
