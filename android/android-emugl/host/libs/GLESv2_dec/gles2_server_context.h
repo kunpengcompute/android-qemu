@@ -535,6 +535,24 @@ struct gles2_server_context_t {
 	glDrawElementsDataNullAEMU_server_proc_t glDrawElementsDataNullAEMU;
 	glUnmapBufferAsyncAEMU_server_proc_t glUnmapBufferAsyncAEMU;
 	glFlushMappedBufferRangeAEMU2_server_proc_t glFlushMappedBufferRangeAEMU2;
+    glEnableiEXT_server_proc_t glEnableiEXT;
+    glDisableiEXT_server_proc_t glDisableiEXT;
+    glBlendEquationiEXT_server_proc_t glBlendEquationiEXT;
+    glBlendEquationSeparateiEXT_server_proc_t glBlendEquationSeparateiEXT;
+    glBlendFunciEXT_server_proc_t glBlendFunciEXT;
+    glBlendFuncSeparateiEXT_server_proc_t glBlendFuncSeparateiEXT;
+    glColorMaskiEXT_server_proc_t glColorMaskiEXT;
+    glIsEnablediEXT_server_proc_t glIsEnablediEXT;
+    glCopyImageSubDataEXT_server_proc_t glCopyImageSubDataEXT;
+    glBlendBarrierKHR_server_proc_t glBlendBarrierKHR;
+    glTexParameterIivEXT_server_proc_t glTexParameterIivEXT;
+    glTexParameterIuivEXT_server_proc_t glTexParameterIuivEXT;
+    glGetTexParameterIivEXT_server_proc_t glGetTexParameterIivEXT;
+    glGetTexParameterIuivEXT_server_proc_t glGetTexParameterIuivEXT;
+    glSamplerParameterIivEXT_server_proc_t glSamplerParameterIivEXT;
+    glSamplerParameterIuivEXT_server_proc_t glSamplerParameterIuivEXT;
+    glGetSamplerParameterIivEXT_server_proc_t glGetSamplerParameterIivEXT;
+    glGetSamplerParameterIuivEXT_server_proc_t glGetSamplerParameterIuivEXT;
 	virtual ~gles2_server_context_t() {}
 	int initDispatchByName( void *(*getProc)(const char *name, void *userData), void *userData);
 };

@@ -537,6 +537,28 @@ typedef void (gles2_APIENTRY *glDrawElementsOffsetNullAEMU_server_proc_t) (void 
 typedef void (gles2_APIENTRY *glDrawElementsDataNullAEMU_server_proc_t) (void *ctx, GLenum, GLsizei, GLenum, void*, GLuint);
 typedef void (gles2_APIENTRY *glUnmapBufferAsyncAEMU_server_proc_t) (void *ctx, GLenum, GLintptr, GLsizeiptr, GLbitfield, void*, GLboolean*);
 typedef void (gles2_APIENTRY *glFlushMappedBufferRangeAEMU2_server_proc_t) (void *ctx, GLenum, GLintptr, GLsizeiptr, GLbitfield, void*);
-
+typedef void(gles2_APIENTRY* glEnableiEXT_server_proc_t)(GLenum target, GLuint index);
+typedef void(gles2_APIENTRY* glDisableiEXT_server_proc_t)(GLenum target, GLuint index);
+typedef void(gles2_APIENTRY* glBlendEquationiEXT_server_proc_t)(GLuint buf, GLenum mode);
+typedef void(gles2_APIENTRY* glBlendEquationSeparateiEXT_server_proc_t)(GLuint buf, GLenum modeRGB,
+    GLenum modeAlpha);
+typedef void(gles2_APIENTRY* glBlendFunciEXT_server_proc_t)(GLuint buf, GLenum src, GLenum dst);
+typedef void(gles2_APIENTRY* glBlendFuncSeparateiEXT_server_proc_t)(GLuint buf, GLenum srcRGB,
+    GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
+typedef void(gles2_APIENTRY* glColorMaskiEXT_server_proc_t)(GLuint index, GLboolean r, GLboolean g,
+    GLboolean b, GLboolean a);
+typedef GLboolean(gles2_APIENTRY* glIsEnablediEXT_server_proc_t)(GLenum target, GLuint index);
+typedef void(gles2_APIENTRY* glCopyImageSubDataEXT_server_proc_t)(GLuint srcName, GLenum srcTarget,
+    GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX,
+    GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth);
+typedef void(gles2_APIENTRY* glBlendBarrierKHR_server_proc_t)(void);
+typedef void(gles2_APIENTRY* glTexParameterIivEXT_server_proc_t)(GLenum target, GLenum pname, const GLint *params);
+typedef void(gles2_APIENTRY* glTexParameterIuivEXT_server_proc_t)(GLenum target, GLenum pname, const GLuint *params);
+typedef void(gles2_APIENTRY* glGetTexParameterIivEXT_server_proc_t)(GLenum target, GLenum pname, GLint *params);
+typedef void(gles2_APIENTRY* glGetTexParameterIuivEXT_server_proc_t)(GLenum target, GLenum pname, GLuint *params);
+typedef void(gles2_APIENTRY* glSamplerParameterIivEXT_server_proc_t)(GLuint sampler, GLenum pname, const GLint *param);
+typedef void(gles2_APIENTRY* glSamplerParameterIuivEXT_server_proc_t)(GLuint sampler, GLenum pname, const GLuint *param);
+typedef void(gles2_APIENTRY* glGetSamplerParameterIivEXT_server_proc_t)(GLuint sampler, GLenum pname, GLint *params);
+typedef void(gles2_APIENTRY* glGetSamplerParameterIuivEXT_server_proc_t)(GLuint sampler, GLenum pname, GLuint *params);
 
 #endif

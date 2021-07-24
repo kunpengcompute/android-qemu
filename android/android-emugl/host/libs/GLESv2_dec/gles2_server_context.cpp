@@ -436,6 +436,26 @@ int gles2_server_context_t::initDispatchByName(void *(*getProc)(const char *, vo
 	glDrawElementsDataNullAEMU = (glDrawElementsDataNullAEMU_server_proc_t) getProc("glDrawElementsDataNullAEMU", userData);
 	glUnmapBufferAsyncAEMU = (glUnmapBufferAsyncAEMU_server_proc_t) getProc("glUnmapBufferAsyncAEMU", userData);
 	glFlushMappedBufferRangeAEMU2 = (glFlushMappedBufferRangeAEMU2_server_proc_t) getProc("glFlushMappedBufferRangeAEMU2", userData);
+    glEnableiEXT = (glEnableiEXT_server_proc_t)getProc("glEnableiEXT", userData);
+    glDisableiEXT = (glDisableiEXT_server_proc_t)getProc("glDisableiEXT", userData);
+    glBlendEquationiEXT = (glBlendEquationiEXT_server_proc_t)getProc("glBlendEquationiEXT", userData);
+    glBlendEquationSeparateiEXT =
+        (glBlendEquationSeparateiEXT_server_proc_t)getProc("glBlendEquationSeparateiEXT", userData);
+    glBlendFunciEXT = (glBlendFunciEXT_server_proc_t)getProc("glBlendFunciEXT", userData);
+    glBlendFuncSeparateiEXT = (glBlendFuncSeparateiEXT_server_proc_t)getProc("glBlendFuncSeparateiEXT", userData);
+    glColorMaskiEXT = (glColorMaskiEXT_server_proc_t)getProc("glColorMaskiEXT", userData);
+    glIsEnablediEXT = (glIsEnablediEXT_server_proc_t)getProc("glIsEnablediEXT", userData);
+    glCopyImageSubDataEXT = (glCopyImageSubDataEXT_server_proc_t)getProc("glCopyImageSubDataEXT", userData);
+    glBlendBarrierKHR = (glBlendBarrierKHR_server_proc_t)getProc("glBlendBarrierKHR", userData);
+
+    glTexParameterIivEXT = (glTexParameterIivEXT_server_proc_t)getProc("glTexParameterIivEXT", userData);
+    glTexParameterIuivEXT = (glTexParameterIuivEXT_server_proc_t)getProc("glTexParameterIuivEXT", userData);
+    glGetTexParameterIivEXT = (glGetTexParameterIivEXT_server_proc_t)getProc("glGetTexParameterIivEXT", userData);
+    glGetTexParameterIuivEXT = (glGetTexParameterIuivEXT_server_proc_t)getProc("glGetTexParameterIuivEXT", userData);
+    glSamplerParameterIivEXT = (glSamplerParameterIivEXT_server_proc_t)getProc("glSamplerParameterIivEXT", userData);
+    glSamplerParameterIuivEXT = (glSamplerParameterIuivEXT_server_proc_t)getProc("glSamplerParameterIuivEXT", userData);
+    glGetSamplerParameterIivEXT = (glGetSamplerParameterIivEXT_server_proc_t)getProc("glGetSamplerParameterIivEXT", userData);
+    glGetSamplerParameterIuivEXT = (glGetSamplerParameterIuivEXT_server_proc_t)getProc("glGetSamplerParameterIuivEXT", userData);
 	return 0;
 }
 

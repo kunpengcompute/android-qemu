@@ -510,6 +510,24 @@ GET_ADDRESS(glDrawElementsOffsetNullAEMU);
 GET_ADDRESS(glDrawElementsDataNullAEMU);
 GET_ADDRESS(glUnmapBufferAsyncAEMU);
 GET_ADDRESS(glFlushMappedBufferRangeAEMU2);
+GET_ADDRESS(glEnableiEXT);
+GET_ADDRESS(glDisableiEXT);
+GET_ADDRESS(glBlendEquationiEXT);
+GET_ADDRESS(glBlendEquationSeparateiEXT);
+GET_ADDRESS(glBlendFunciEXT);
+GET_ADDRESS(glBlendFuncSeparateiEXT);
+GET_ADDRESS(glColorMaskiEXT);
+GET_ADDRESS(glIsEnablediEXT);
+GET_ADDRESS(glCopyImageSubDataEXT);
+GET_ADDRESS(glBlendBarrierKHR);
+GET_ADDRESS(glTexParameterIivEXT);
+GET_ADDRESS(glTexParameterIuivEXT);
+GET_ADDRESS(glGetTexParameterIivEXT);
+GET_ADDRESS(glGetTexParameterIuivEXT);
+GET_ADDRESS(glSamplerParameterIivEXT);
+GET_ADDRESS(glSamplerParameterIuivEXT);
+GET_ADDRESS(glGetSamplerParameterIivEXT);
+GET_ADDRESS(glGetSamplerParameterIuivEXT);
 
 std::unique_ptr<RenderWindow> g_renderWindow = nullptr;
 
