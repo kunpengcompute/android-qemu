@@ -222,6 +222,7 @@ bool FbConfigList::MatchAllConfig()
 
 EGLint FbConfigList::getMatchConfigs(EGLint hostConfig) const
 {
+    hostConfig = hostConfig - 1;  //服务端的config id从1开始
     if (hostConfig < 0 || hostConfig >= kServerConfigCount) {
         ERR("Failed to match config, host config:%d error", hostConfig);
         return -1;
