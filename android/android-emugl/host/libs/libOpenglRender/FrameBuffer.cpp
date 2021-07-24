@@ -983,7 +983,7 @@ HandleType FrameBuffer::createColorBufferWithHandleLocked(
                 RenderThreadInfo* tInfo = RenderThreadInfo::get();
                 uint64_t puid = tInfo->m_puid;
                 if (puid) {
-                    m_procOwnedColorBuffers[puid].insert(handle);
+                    m_procOwnedColorBuffers[puid][handle]++;
             }
         }
     } else {
@@ -1202,7 +1202,7 @@ int FrameBuffer::openColorBuffer(HandleType p_colorbuffer) {
 
     uint64_t puid = tInfo->m_puid;
     if (puid) {
-        m_procOwnedColorBuffers[puid].insert(p_colorbuffer);
+        m_procOwnedColorBuffers[puid][p_colorbuffer]++;
     }
     return 0;
 }
@@ -1257,7 +1257,14 @@ bool FrameBuffer::closeColorBufferLocked(HandleType p_colorbuffer,
         // to give guest a notice yet)
         return false;
     }
-
+    RenderThreadInfo* tInfo = RenderThreadInfo::get();
+    uint64_t puid = tInfo->m_puid;
+    if (puid) {
+        auto iter = m_procOwnedColorBuffers[puid].find(p_colorbuffer);
+        if (iter != m_procOwnedColorBuffers[puid].end() && iter->second > 0) {
+            --iter->second;
+        }
+    }
     bool deleted = false;
     // The guest can and will gralloc_alloc/gralloc_free and then
     // gralloc_register a buffer, due to API level (O+) or
@@ -1384,8 +1391,17 @@ std::vector<HandleType> FrameBuffer::cleanupProcGLObjects_locked(uint64_t puid, 
             auto procIte = m_procOwnedColorBuffers.find(puid);
             if (procIte != m_procOwnedColorBuffers.end()) {
                 for (auto cb : procIte->second) {
-                    if (closeColorBufferLocked(cb, forced)) {
-                        colorBuffersToCleanup.push_back(cb);
+                    int count = cb.second;
+                    bool isFirst = true;
+                    while(count > 0) {
+                        if (isFirst) {
+                            INFO("begin clearup colorbuffer:%#x, ref:%d", cb.first, count);
+                            isFirst = false;
+                        }
+                        if (closeColorBufferLocked(cb.first, forced)) {
+                            colorBuffersToCleanup.push_back(cb.first);
+                        }
+                        --count;
                     }
                 }
                 m_procOwnedColorBuffers.erase(procIte);
@@ -1481,7 +1497,11 @@ bool FrameBuffer::setWindowSurfaceColorBuffer(HandleType p_surface,
         else
             closeColorBufferLocked(w->second.second);
     }
-
+    RenderThreadInfo* tInfo = RenderThreadInfo::get();
+    uint64_t puid = tInfo->m_puid;
+    if (puid) {
+        m_procOwnedColorBuffers[puid][p_colorbuffer]++;
+    }
     c->second.refcount++;
     (*w).second.second = p_colorbuffer;
 
@@ -2405,7 +2425,6 @@ void FrameBuffer::onSave(Stream* stream,
     });
 
     saveProcOwnedCollection(stream, m_procOwnedWindowSurfaces);
-    saveProcOwnedCollection(stream, m_procOwnedColorBuffers);
     saveProcOwnedCollection(stream, m_procOwnedEGLImages);
     saveProcOwnedCollection(stream, m_procOwnedRenderContext);
 
@@ -2561,7 +2580,6 @@ bool FrameBuffer::onLoad(Stream* stream,
     });
 
     loadProcOwnedCollection(stream, &m_procOwnedWindowSurfaces);
-    loadProcOwnedCollection(stream, &m_procOwnedColorBuffers);
     loadProcOwnedCollection(stream, &m_procOwnedEGLImages);
     loadProcOwnedCollection(stream, &m_procOwnedRenderContext);
 

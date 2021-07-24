@@ -66,8 +66,8 @@ typedef std::unordered_set<HandleType> RenderContextSet;
 typedef std::unordered_map<uint64_t, RenderContextSet> ProcOwnedRenderContexts;
 
 typedef std::unordered_map<HandleType, ColorBufferRef> ColorBufferMap;
-typedef std::unordered_multiset<HandleType> ColorBufferSet;
-typedef std::unordered_map<uint64_t, ColorBufferSet> ProcOwnedColorBuffers;
+typedef std::unordered_map<HandleType, int> ColorBufferRefMap;
+typedef std::unordered_map<uint64_t, ColorBufferRefMap> ProcOwnedColorBuffers;
 
 typedef std::unordered_set<HandleType> EGLImageSet;
 typedef std::unordered_map<uint64_t, EGLImageSet> ProcOwnedEGLImages;
