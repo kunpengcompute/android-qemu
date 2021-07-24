@@ -51,7 +51,11 @@ void PostWorker::post(ColorBuffer* cb) {
     int zRot = mFb->getZrot();
 
     cb->waitSync();
-
+    if (zRot == 90 || zRot == 270) {
+        s_gles2.glViewport(0, 0, mFb->getGuestHeight(), mFb->getGuestWidth());
+    } else {
+        s_gles2.glViewport(0, 0, mFb->getGuestWidth(), mFb->getGuestHeight());
+    }
     // Find the x and y values at the origin when "fully scrolled."
     // Multiply by 2 because the texture goes from -1 to 1, not 0 to 1.
     // Multiply the windowing coordinates by DPR because they ignore
@@ -63,37 +67,9 @@ void PostWorker::post(ColorBuffer* cb) {
     float dx = px * fx;
     float dy = py * fy;
 
-    if (emugl::get_emugl_multi_display_operations().isMultiDisplayEnabled()) {
-        uint32_t combinedW, combinedH;
-        emugl::get_emugl_multi_display_operations().getCombinedDisplaySize(&combinedW, &combinedH);
-        mFb->getTextureDraw()->prepareForDrawLayer();
-        int32_t start_id = -1, x, y;
-        uint32_t id, w, h, c;
-        while(emugl::get_emugl_multi_display_operations().getNextMultiDisplay(start_id, &id,
-                                                                              &x, &y, &w, &h,
-                                                                              nullptr, nullptr,
-                                                                              &c)) {
-            if ((id != 0) && (w == 0 || h == 0 || c == 0)) {
-                start_id = id;
-                continue;
-            }
-            ColorBuffer* multiDisplayCb = id == 0 ? cb : mFb->findColorBuffer(c).get();
-            if (multiDisplayCb == nullptr) {
-                ERR("fail to find cb %d\n", c);
-                start_id = id;
-                continue;
-            }
-            ComposeLayer l;
-            fillMultiDisplayPostStruct(&l, x, y, w, h, multiDisplayCb);
-            multiDisplayCb->postLayer(&l, combinedW, combinedH);
-            start_id = id;
-        }
-    } else {
-        // render the color buffer to the window and apply the overlay
-        GLuint tex = cb->scale();
-        cb->postWithOverlay(tex, zRot, dx, dy);
-    }
-
+    // render the color buffer to the window and apply the overlay
+    GLuint tex = cb->scale();
+    cb->postWithOverlay(tex, zRot, dx, dy);
     s_egl.eglSwapBuffers(mFb->getDisplay(), mFb->getWindowSurface());
 }
 
@@ -120,6 +96,17 @@ void PostWorker::clear() {
     s_gles2.glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
                     GL_STENCIL_BUFFER_BIT);
     s_egl.eglSwapBuffers(mFb->getDisplay(), mFb->getWindowSurface());
+}
+
+void PostWorker::resetSubWindow() {
+    if (m_initialized) {
+        INFO("reset sub window");
+        if (mFb->getDisplay() != EGL_NO_DISPLAY) {
+            s_egl.eglMakeCurrent(mFb->getDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE,
+                             EGL_NO_CONTEXT);
+        }
+        m_initialized = false;
+    }
 }
 
 void PostWorker::compose(ComposeDevice* p) {

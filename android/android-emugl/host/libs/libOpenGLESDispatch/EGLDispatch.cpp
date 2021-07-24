@@ -23,7 +23,7 @@
 EGLDispatch s_egl;
 
 #define RENDER_EGL_LOAD_FIELD_STATIC(return_type, function_name, signature) \
-    s_egl. function_name = (function_name ## _t) (translator::egl::function_name); \
+    s_egl. function_name = (function_name ## _t) lib->findSymbol(#function_name);
 
 #define RENDER_EGL_LOAD_FIELD_WITH_EGL(return_type, function_name, signature) \
     if ((!s_egl. function_name) && s_egl.eglGetProcAddress) s_egl. function_name = \
@@ -37,7 +37,17 @@ EGLDispatch s_egl;
 
 bool init_egl_dispatch() {
     if (s_egl.initialized) return true;
-
+#if defined(__LP64__)
+    const char* libName = "/system/lib64/libEGL.so";
+#else
+    const char* libName = "/system/lib/libEGL.so";
+#endif
+    char error[256];
+    emugl::SharedLibrary *lib = emugl::SharedLibrary::open(libName, error, sizeof(error));
+    if (!lib) {
+        printf("Failed to open %s: [%s]\n", libName, error);
+        return false;
+    }
     LIST_RENDER_EGL_FUNCTIONS(RENDER_EGL_LOAD_FIELD_STATIC)
     LIST_RENDER_EGL_FUNCTIONS(RENDER_EGL_LOAD_FIELD_WITH_EGL)
     LIST_RENDER_EGL_EXTENSIONS_FUNCTIONS(RENDER_EGL_LOAD_OPTIONAL_FIELD_STATIC)

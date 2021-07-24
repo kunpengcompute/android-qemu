@@ -15,13 +15,10 @@
 */
 #ifndef _ERROR_LOG_H_
 #define _ERROR_LOG_H_
-
+#include <android/log.h>
+#define TAG "EmuGLRender"
 #include <stdio.h>
-#define ERR(...)    fprintf(stderr, __VA_ARGS__)
-#ifdef EMUGL_DEBUG
-#    define DBG(...)    fprintf(stderr, __VA_ARGS__)
-#else
-#    define DBG(...)    ((void)0)
-#endif
-
+#define ERR(...)    __android_log_print(ANDROID_LOG_ERROR, TAG, __VA_ARGS__)
+#define INFO(...)    __android_log_print(ANDROID_LOG_INFO, TAG, __VA_ARGS__)
+#define DBG(...)    __android_log_print(ANDROID_LOG_DEBUG, TAG, __VA_ARGS__)
 #endif  // _ERROR_LOG_H_

@@ -19,4 +19,3 @@
 #include "OpenGLESDispatch/GLESv2Dispatch.h"
 
 extern GLESv2Dispatch s_gles2;
-extern GLESv1Dispatch s_gles1;

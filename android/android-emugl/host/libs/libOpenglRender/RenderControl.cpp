@@ -17,7 +17,6 @@
 #include "RenderControl.h"
 
 #include "DispatchTables.h"
-#include "FbConfig.h"
 #include "FenceSync.h"
 #include "FrameBuffer.h"
 #include "GLESVersionDetector.h"
@@ -26,8 +25,6 @@
 #include "SyncThread.h"
 #include "ChecksumCalculatorThreadInfo.h"
 #include "OpenGLESDispatch/EGLDispatch.h"
-#include "vulkan/VkCommonOperations.h"
-#include "vulkan/VkDecoderGlobalState.h"
 
 #include "android/utils/debug.h"
 #include "android/base/StringView.h"
@@ -46,9 +43,7 @@
 
 using android::base::AutoLock;
 using android::base::Lock;
-using emugl::emugl_feature_is_enabled;
 using emugl::emugl_sync_device_exists;
-using emugl::emugl_sync_register_trigger_wait;
 
 #define DEBUG_GRALLOC_SYNC 0
 #define DEBUG_EGL_SYNC 0
@@ -97,7 +92,7 @@ public:
         // in many situations
         // (switching camera sides, exiting benchmark apps, etc)
         // So, we put GrallocSync under the feature control.
-        mEnabled = emugl_feature_is_enabled(android::featurecontrol::GrallocSync);
+        mEnabled = false;
 
         // There are two potential tricky situations to handle:
         // a. Multiple users of gralloc buffers that all want to
@@ -213,23 +208,19 @@ static constexpr android::base::StringView kVulkanFreeMemorySync = "ANDROID_EMU_
 // virtio-gpu native sync
 static constexpr android::base::StringView kVirtioGpuNativeSync = "ANDROID_EMU_virtio_gpu_native_sync";
 
-static void rcTriggerWait(uint64_t glsync_ptr,
-                          uint64_t thread_ptr,
-                          uint64_t timeline);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-void registerTriggerWait() {
-    emugl_sync_register_trigger_wait(rcTriggerWait);
-}
 
-static GLint rcGetRendererVersion()
+GLint rcGetRendererVersion()
 {
-    registerTriggerWait();
 
     sGrallocSync.ptr();
     return rendererVersion;
 }
 
-static EGLint rcGetEGLVersion(EGLint* major, EGLint* minor)
+EGLint rcGetEGLVersion(EGLint* major, EGLint* minor)
 {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
@@ -241,7 +232,7 @@ static EGLint rcGetEGLVersion(EGLint* major, EGLint* minor)
     return EGL_TRUE;
 }
 
-static EGLint rcQueryEGLString(EGLenum name, void* buffer, EGLint bufferSize)
+EGLint rcQueryEGLString(EGLenum name, void* buffer, EGLint bufferSize)
 {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
@@ -255,7 +246,7 @@ static EGLint rcQueryEGLString(EGLenum name, void* buffer, EGLint bufferSize)
 
     std::string eglStr(str);
     if ((FrameBuffer::getMaxGLESVersion() >= GLES_DISPATCH_MAX_VERSION_3_0) &&
-        emugl_feature_is_enabled(android::featurecontrol::GLESDynamicVersion) &&
+        false &&
         eglStr.find("EGL_KHR_create_context") == std::string::npos) {
         eglStr += "EGL_KHR_create_context ";
     }
@@ -269,63 +260,29 @@ static EGLint rcQueryEGLString(EGLenum name, void* buffer, EGLint bufferSize)
     return len;
 }
 
-static bool shouldEnableAsyncSwap() {
-    bool isPhone;
-    emugl::getAvdInfo(&isPhone, NULL);
-    bool playStoreImage = emugl::emugl_feature_is_enabled(
-            android::featurecontrol::PlayStoreImage);
-    return emugl_feature_is_enabled(android::featurecontrol::GLAsyncSwap) &&
-           emugl_sync_device_exists() && (isPhone || playStoreImage) &&
-           sizeof(void*) == 8;
+bool shouldEnableAsyncSwap() {
+    return false;
 }
 
-static bool shouldEnableVirtioGpuNativeSync() {
-    return emugl_feature_is_enabled(android::featurecontrol::VirtioGpuNativeSync);
+bool shouldEnableVirtioGpuNativeSync() {
+    return false;
 }
 
-static bool shouldEnableHostComposition() {
-    return emugl_feature_is_enabled(android::featurecontrol::HostComposition);
+bool shouldEnableHostComposition() {
+    return false;
 }
 
-static bool shouldEnableVulkan() {
-    auto supportInfo =
-        goldfish_vk::VkDecoderGlobalState::get()->
-            getHostFeatureSupport();
-    bool flagEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::Vulkan);
+bool shouldEnableVulkan() {
     // TODO: Restrict further to devices supporting external memory.
-    return supportInfo.supportsVulkan &&
-           flagEnabled;
+    return false;
 }
 
-static bool shouldEnableDeferredVulkanCommands() {
-    auto supportInfo =
-        goldfish_vk::VkDecoderGlobalState::get()->
-            getHostFeatureSupport();
-    return supportInfo.supportsVulkan &&
-           supportInfo.useDeferredCommands;
+bool shouldEnableDeferredVulkanCommands() {
+    return false;
 }
 
-static bool shouldEnableCreateResourcesWithRequirements() {
-    auto supportInfo =
-        goldfish_vk::VkDecoderGlobalState::get()->
-            getHostFeatureSupport();
-    return supportInfo.supportsVulkan &&
-           supportInfo.useCreateResourcesWithRequirements;
-}
+bool shouldEnableCreateResourcesWithRequirements() {
 
-android::base::StringView maxVersionToFeatureString(GLESDispatchMaxVersion version) {
-    switch (version) {
-        case GLES_DISPATCH_MAX_VERSION_2:
-            return kGLESDynamicVersion_2;
-        case GLES_DISPATCH_MAX_VERSION_3_0:
-            return kGLESDynamicVersion_3_0;
-        case GLES_DISPATCH_MAX_VERSION_3_1:
-            return kGLESDynamicVersion_3_1;
-        default:
-            return kGLESDynamicVersion_2;
-    }
-}
 
 // OpenGL ES 3.x support involves changing the GL_VERSION string, which is
 // assumed to be formatted in the following way:
@@ -337,33 +294,17 @@ android::base::StringView maxVersionToFeatureString(GLESDispatchMaxVersion versi
 // version string in the first place since the underlying backend (whether it
 // is Translator, SwiftShader, ANGLE, et al) may not advertise a GL_VERSION
 // string reflecting their maximum capabilities.
-std::string replaceESVersionString(const std::string& prev,
-                                   android::base::StringView newver) {
 
     // There is no need to fiddle with the string
     // if we are in a ES 1.x context.
     // Such contexts are considered as a special case that must
     // be untouched.
-    if (prev.find("ES-CM") != std::string::npos) {
-        return prev;
-    }
 
-    size_t esStart = prev.find("ES ");
-    size_t esEnd = prev.find(" ", esStart + 3);
 
-    if (esStart == std::string::npos ||
-        esEnd == std::string::npos) {
         // Account for out-of-spec version strings.
-        fprintf(stderr, "%s: Error: invalid OpenGL ES version string %s\n",
-                __func__, prev.c_str());
-        return prev;
-    }
 
-    std::string res = prev.substr(0, esStart + 3);
-    res += newver;
-    res += prev.substr(esEnd);
 
-    return res;
+    return false;
 }
 
 // If the GLES3 feature is disabled, we also want to splice out
@@ -375,7 +316,7 @@ void removeExtension(std::string& currExts, const std::string& toRemove) {
         currExts.erase(pos, toRemove.length());
 }
 
-static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
+EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     RenderThreadInfo *tInfo = RenderThreadInfo::get();
 
@@ -390,7 +331,7 @@ static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
             str = (const char *)s_gles2.glGetString(name);
         }
         else {
-            str = (const char *)s_gles1.glGetString(name);
+            fprintf(stderr, "not support gles 1.0");
         }
         if (str) {
             glStr += str;
@@ -405,35 +346,27 @@ static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
         glStr = filterExtensionsBasedOnMaxVersion(maxVersion, glStr);
     }
 
-    bool isChecksumEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::GLPipeChecksum);
+    bool isChecksumEnabled = false;
     bool asyncSwapEnabled = shouldEnableAsyncSwap();
     bool virtioGpuNativeSyncEnabled = shouldEnableVirtioGpuNativeSync();
-    bool dma1Enabled =
-        emugl_feature_is_enabled(android::featurecontrol::GLDMA);
-    bool dma2Enabled =
-        emugl_feature_is_enabled(android::featurecontrol::GLDMA2);
-    bool directMemEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::GLDirectMem);
+    bool dma1Enabled = false;
+    bool dma2Enabled = false;
+    bool directMemEnabled = false;
     bool hostCompositionEnabled = shouldEnableHostComposition();
     bool vulkanEnabled = shouldEnableVulkan();
     bool deferredVulkanCommandsEnabled =
         shouldEnableVulkan() && shouldEnableDeferredVulkanCommands();
     bool vulkanNullOptionalStringsEnabled =
-        shouldEnableVulkan() && emugl_feature_is_enabled(android::featurecontrol::VulkanNullOptionalStrings);
+        shouldEnableVulkan() && false;
     bool vulkanCreateResourceWithRequirementsEnabled =
         shouldEnableVulkan() && shouldEnableCreateResourcesWithRequirements();
-    bool YUV420888toNV21Enabled =
-        emugl_feature_is_enabled(android::featurecontrol::YUV420888toNV21);
-    bool YUVCacheEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::YUVCache);
+    bool YUV420888toNV21Enabled = false;
+    bool YUVCacheEnabled = false;
     bool AsyncUnmapBufferEnabled = true;
     bool vulkanIgnoredHandlesEnabled =
-        shouldEnableVulkan() && emugl_feature_is_enabled(android::featurecontrol::VulkanIgnoredHandles);
-    bool virtioGpuNextEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::VirtioGpuNext);
-    bool hasSharedSlotsHostMemoryAllocatorEnabled =
-        emugl_feature_is_enabled(android::featurecontrol::HasSharedSlotsHostMemoryAllocator);
+        shouldEnableVulkan() && false;
+    bool virtioGpuNextEnabled = false;
+    bool hasSharedSlotsHostMemoryAllocatorEnabled = false;
     bool vulkanFreeMemorySyncEnabled =
         shouldEnableVulkan();
 
@@ -542,7 +475,7 @@ static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
     if (name == GL_EXTENSIONS) {
 
         GLESDispatchMaxVersion guestExtVer = GLES_DISPATCH_MAX_VERSION_2;
-        if (emugl_feature_is_enabled(android::featurecontrol::GLESDynamicVersion)) {
+        if (false) {
             // If the image is in ES 3 mode, add GL_OES_EGL_image_external_essl3 for better Skia support.
             glStr += "GL_OES_EGL_image_external_essl3 ";
             guestExtVer = maxVersion;
@@ -557,39 +490,13 @@ static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
         // ASTC LDR compressed texture support.
         glStr += "GL_KHR_texture_compression_astc_ldr ";
 
-        if (emugl_feature_is_enabled(android::featurecontrol::IgnoreHostOpenGLErrors)) {
+        if (false) {
             glStr += kGLESNoHostError;
             glStr += " ";
         }
-
-        glStr += maxVersionToFeatureString(guestExtVer);
         glStr += " ";
     }
 
-    if (name == GL_VERSION) {
-        if (emugl_feature_is_enabled(android::featurecontrol::GLESDynamicVersion)) {
-            GLESDispatchMaxVersion maxVersion = FrameBuffer::getMaxGLESVersion();
-            switch (maxVersion) {
-            // Underlying GLES implmentation's max version string
-            // is allowed to be higher than the version of the request
-            // for the context---it can create a higher version context,
-            // and return simply the max possible version overall.
-            case GLES_DISPATCH_MAX_VERSION_2:
-                glStr = replaceESVersionString(glStr, "2.0");
-                break;
-            case GLES_DISPATCH_MAX_VERSION_3_0:
-                glStr = replaceESVersionString(glStr, "3.0");
-                break;
-            case GLES_DISPATCH_MAX_VERSION_3_1:
-                glStr = replaceESVersionString(glStr, "3.1");
-                break;
-            default:
-                break;
-            }
-        } else {
-            glStr = replaceESVersionString(glStr, "2.0");
-        }
-    }
 
     int nextBufferSize = glStr.size() + 1;
 
@@ -601,7 +508,7 @@ static EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
     return nextBufferSize;
 }
 
-static EGLint rcGetNumConfigs(uint32_t* p_numAttribs)
+EGLint rcGetNumConfigs(uint32_t* p_numAttribs)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     int numConfigs = 0, numAttribs = 0;
@@ -613,14 +520,14 @@ static EGLint rcGetNumConfigs(uint32_t* p_numAttribs)
     return numConfigs;
 }
 
-static EGLint rcGetConfigs(uint32_t bufSize, GLuint* buffer)
+EGLint rcGetConfigs(uint32_t bufSize, GLuint* buffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     GLuint bufferSize = (GLuint)bufSize;
     return FrameBuffer::getFB()->getConfigs()->packConfigs(bufferSize, buffer);
 }
 
-static EGLint rcChooseConfig(EGLint *attribs,
+EGLint rcChooseConfig(EGLint *attribs,
                              uint32_t attribs_size,
                              uint32_t *configs,
                              uint32_t configs_size)
@@ -639,10 +546,10 @@ static EGLint rcChooseConfig(EGLint *attribs,
     }
 
     return fb->getConfigs()->chooseConfig(
-            attribs, (EGLint*)configs, (EGLint)configs_size);
+            attribs, (EGLint*)configs, (EGLint)configs_size, true);
 }
 
-static EGLint rcGetFBParam(EGLint param)
+EGLint rcGetFBParam(EGLint param)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -681,7 +588,7 @@ static EGLint rcGetFBParam(EGLint param)
     return ret;
 }
 
-static uint32_t rcCreateContext(uint32_t config,
+uint32_t rcCreateContext(uint32_t config,
                                 uint32_t share, uint32_t glVersion)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -689,12 +596,12 @@ static uint32_t rcCreateContext(uint32_t config,
     if (!fb) {
         return 0;
     }
-
-    HandleType ret = fb->createRenderContext(config, share, (GLESApi)glVersion);
+    uint32_t clientConfigId = fb->getMatchConfigs(config);
+    HandleType ret = fb->createRenderContext(clientConfigId, share, (GLESApi)glVersion);
     return ret;
 }
 
-static void rcDestroyContext(uint32_t context)
+void rcDestroyContext(uint32_t context)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -705,7 +612,7 @@ static void rcDestroyContext(uint32_t context)
     fb->DestroyRenderContext(context);
 }
 
-static uint32_t rcCreateWindowSurface(uint32_t config,
+uint32_t rcCreateWindowSurface(uint32_t config,
                                       uint32_t width, uint32_t height)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -713,11 +620,11 @@ static uint32_t rcCreateWindowSurface(uint32_t config,
     if (!fb) {
         return 0;
     }
-
-    return fb->createWindowSurface(config, width, height);
+    uint32_t clientConfigId = fb->getMatchConfigs(config);
+    return fb->createWindowSurface(clientConfigId, width, height);
 }
 
-static void rcDestroyWindowSurface(uint32_t windowSurface)
+void rcDestroyWindowSurface(uint32_t windowSurface)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -728,7 +635,7 @@ static void rcDestroyWindowSurface(uint32_t windowSurface)
     fb->DestroyWindowSurface( windowSurface );
 }
 
-static uint32_t rcCreateColorBuffer(uint32_t width,
+uint32_t rcCreateColorBuffer(uint32_t width,
                                     uint32_t height, GLenum internalFormat)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -741,7 +648,7 @@ static uint32_t rcCreateColorBuffer(uint32_t width,
                                  FRAMEWORK_FORMAT_GL_COMPATIBLE);
 }
 
-static uint32_t rcCreateColorBufferDMA(uint32_t width,
+uint32_t rcCreateColorBufferDMA(uint32_t width,
                                        uint32_t height, GLenum internalFormat,
                                        int frameworkFormat)
 {
@@ -755,7 +662,7 @@ static uint32_t rcCreateColorBufferDMA(uint32_t width,
                                  (FrameworkFormat)frameworkFormat);
 }
 
-static int rcOpenColorBuffer2(uint32_t colorbuffer)
+int rcOpenColorBuffer2(uint32_t colorbuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -765,12 +672,12 @@ static int rcOpenColorBuffer2(uint32_t colorbuffer)
     return fb->openColorBuffer( colorbuffer );
 }
 
-static void rcOpenColorBuffer(uint32_t colorbuffer)
+void rcOpenColorBuffer(uint32_t colorbuffer)
 {
     (void) rcOpenColorBuffer2(colorbuffer);
 }
 
-static void rcCloseColorBuffer(uint32_t colorbuffer)
+void rcCloseColorBuffer(uint32_t colorbuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -780,7 +687,7 @@ static void rcCloseColorBuffer(uint32_t colorbuffer)
     fb->closeColorBuffer( colorbuffer );
 }
 
-static int rcFlushWindowColorBuffer(uint32_t windowSurface)
+int rcFlushWindowColorBuffer(uint32_t windowSurface)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     GRSYNC_DPRINT("waiting for gralloc cb lock");
@@ -793,18 +700,11 @@ static int rcFlushWindowColorBuffer(uint32_t windowSurface)
         return -1;
     }
 
-    // Update from Vulkan if necessary
-    goldfish_vk::updateColorBufferFromVkImage(
-        fb->getWindowSurfaceColorBufferHandle(windowSurface));
 
-    if (!fb->flushWindowSurfaceColorBuffer(windowSurface)) {
+    if (!fb->flushWindowSurfaceColorBuffer(windowSurface, nullptr, 0)) {
         GRSYNC_DPRINT("unlock gralloc cb lock }");
         return -1;
     }
-
-    // Update to Vulkan if necessary
-    goldfish_vk::updateVkImageFromColorBuffer(
-        fb->getWindowSurfaceColorBufferHandle(windowSurface));
 
     GRSYNC_DPRINT("unlock gralloc cb lock }");
 
@@ -834,12 +734,12 @@ static int rcFlushWindowColorBuffer(uint32_t windowSurface)
 // the guest will not wait until this function returns,
 // nor will it immediately send the command,
 // resulting in more asynchronous behavior.
-static void rcFlushWindowColorBufferAsync(uint32_t windowSurface)
+void rcFlushWindowColorBufferAsync(uint32_t windowSurface)
 {
     rcFlushWindowColorBuffer(windowSurface);
 }
 
-static void rcSetWindowColorBuffer(uint32_t windowSurface,
+void rcSetWindowColorBuffer(uint32_t windowSurface,
                                    uint32_t colorBuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -850,7 +750,7 @@ static void rcSetWindowColorBuffer(uint32_t windowSurface,
     fb->setWindowSurfaceColorBuffer(windowSurface, colorBuffer);
 }
 
-static EGLint rcMakeCurrent(uint32_t context,
+EGLint rcMakeCurrent(uint32_t context,
                             uint32_t drawSurf, uint32_t readSurf)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -864,54 +764,44 @@ static EGLint rcMakeCurrent(uint32_t context,
     return (ret ? EGL_TRUE : EGL_FALSE);
 }
 
-static void rcFBPost(uint32_t colorBuffer)
+void rcFBPost(uint32_t colorBuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return;
     }
-
-    // Update from Vulkan if necessary
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
-
     fb->post(colorBuffer);
 }
 
-static void rcFBSetSwapInterval(EGLint interval)
+void rcFBSetSwapInterval(EGLint interval)
 {
    // XXX: TBD - should be implemented
 }
 
-static void rcBindTexture(uint32_t colorBuffer)
+void rcBindTexture(uint32_t colorBuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return;
     }
-
     // Update from Vulkan if necessary
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
-
     fb->bindColorBufferToTexture(colorBuffer);
 }
 
-static void rcBindRenderbuffer(uint32_t colorBuffer)
+void rcBindRenderbuffer(uint32_t colorBuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return;
     }
-
-    // Update from Vulkan if necessary
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
 
     fb->bindColorBufferToRenderbuffer(colorBuffer);
 }
 
-static EGLint rcColorBufferCacheFlush(uint32_t colorBuffer,
+EGLint rcColorBufferCacheFlush(uint32_t colorBuffer,
                                       EGLint postCount, int forRead)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -922,7 +812,7 @@ static EGLint rcColorBufferCacheFlush(uint32_t colorBuffer,
     return 0;
 }
 
-static void rcReadColorBuffer(uint32_t colorBuffer,
+void rcReadColorBuffer(uint32_t colorBuffer,
                               GLint x, GLint y,
                               GLint width, GLint height,
                               GLenum format, GLenum type, void* pixels)
@@ -933,13 +823,10 @@ static void rcReadColorBuffer(uint32_t colorBuffer,
         return;
     }
 
-    // Update from Vulkan if necessary
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
-
     fb->readColorBuffer(colorBuffer, x, y, width, height, format, type, pixels);
 }
 
-static int rcUpdateColorBuffer(uint32_t colorBuffer,
+int rcUpdateColorBuffer(uint32_t colorBuffer,
                                GLint x, GLint y,
                                GLint width, GLint height,
                                GLenum format, GLenum type, void* pixels)
@@ -953,22 +840,17 @@ static int rcUpdateColorBuffer(uint32_t colorBuffer,
         return -1;
     }
 
-    // Since this is a modify operation, also read the current contents
-    // of the VkImage, if any.
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
 
     fb->updateColorBuffer(colorBuffer, x, y, width, height, format, type, pixels);
 
     GRSYNC_DPRINT("unlock gralloc cb lock");
     sGrallocSync->unlockColorBufferPrepare();
 
-    // Update to Vulkan if necessary
-    goldfish_vk::updateVkImageFromColorBuffer(colorBuffer);
 
     return 0;
 }
 
-static int rcUpdateColorBufferDMA(uint32_t colorBuffer,
+int rcUpdateColorBufferDMA(uint32_t colorBuffer,
                                   GLint x, GLint y,
                                   GLint width, GLint height,
                                   GLenum format, GLenum type,
@@ -983,23 +865,17 @@ static int rcUpdateColorBufferDMA(uint32_t colorBuffer,
         return -1;
     }
 
-    // Since this is a modify operation, also read the current contents
-    // of the VkImage, if any.
-    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
-
     fb->updateColorBuffer(colorBuffer, x, y, width, height,
                           format, type, pixels);
 
     GRSYNC_DPRINT("unlock gralloc cb lock");
     sGrallocSync->unlockColorBufferPrepare();
 
-    // Update to Vulkan if necessary
-    goldfish_vk::updateVkImageFromColorBuffer(colorBuffer);
 
     return 0;
 }
 
-static uint32_t rcCreateClientImage(uint32_t context, EGLenum target, GLuint buffer)
+uint32_t rcCreateClientImage(uint32_t context, EGLenum target, GLuint buffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -1010,7 +886,7 @@ static uint32_t rcCreateClientImage(uint32_t context, EGLenum target, GLuint buf
     return fb->createClientImage(context, target, buffer);
 }
 
-static int rcDestroyClientImage(uint32_t image)
+int rcDestroyClientImage(uint32_t image)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -1021,7 +897,7 @@ static int rcDestroyClientImage(uint32_t image)
     return fb->destroyClientImage(image);
 }
 
-static void rcSelectChecksumHelper(uint32_t protocol, uint32_t reserved) {
+void rcSelectChecksumHelper(uint32_t protocol, uint32_t reserved) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     ChecksumCalculatorThreadInfo::setVersion(protocol);
 }
@@ -1031,7 +907,7 @@ static void rcSelectChecksumHelper(uint32_t protocol, uint32_t reserved) {
 // We will then need to use the host to find out
 // when to signal that native fence fd. We use
 // SyncThread for that.
-static void rcTriggerWait(uint64_t eglsync_ptr,
+void rcTriggerWait(uint64_t eglsync_ptr,
                           uint64_t thread_ptr,
                           uint64_t timeline) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -1054,7 +930,7 @@ static void rcTriggerWait(uint64_t eglsync_ptr,
 // host's implementation of |eglCreateSyncKHR|. A SyncThread is also notified
 // for purposes of signaling any native fence fd's that get created in the
 // guest off the sync object created here.
-static void rcCreateSyncKHR(EGLenum type,
+void rcCreateSyncKHR(EGLenum type,
                             EGLint* attribs,
                             uint32_t num_attribs,
                             int destroy_when_signaled,
@@ -1073,7 +949,6 @@ static void rcCreateSyncKHR(EGLenum type,
     // But if we are loading from snapshot, that's not
     // guaranteed, and we need to make sure
     // rcTriggerWait is registered.
-    emugl_sync_register_trigger_wait(rcTriggerWait);
     FenceSync* fenceSync = new FenceSync(hasNativeFence,
                                          destroy_when_signaled);
 
@@ -1094,7 +969,7 @@ static void rcCreateSyncKHR(EGLenum type,
 // on the guest through using the host's existing
 // |eglClientWaitSyncKHR| implementation, which is done
 // through the FenceSync object.
-static EGLint rcClientWaitSyncKHR(uint64_t handle,
+EGLint rcClientWaitSyncKHR(uint64_t handle,
                                   EGLint flags,
                                   uint64_t timeout) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -1128,7 +1003,7 @@ static EGLint rcClientWaitSyncKHR(uint64_t handle,
     return fenceSync->wait(timeout);
 }
 
-static void rcWaitSyncKHR(uint64_t handle,
+void rcWaitSyncKHR(uint64_t handle,
                                   EGLint flags) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     RenderThreadInfo *tInfo = RenderThreadInfo::get();
@@ -1157,7 +1032,7 @@ static void rcWaitSyncKHR(uint64_t handle,
     fenceSync->waitAsync();
 }
 
-static int rcDestroySyncKHR(uint64_t handle) {
+int rcDestroySyncKHR(uint64_t handle) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FenceSync* fenceSync = FenceSync::getFromHandle(handle);
     if (!fenceSync) return 0;
@@ -1165,13 +1040,13 @@ static int rcDestroySyncKHR(uint64_t handle) {
     return 0;
 }
 
-static void rcSetPuid(uint64_t puid) {
+void rcSetPuid(uint64_t puid) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     RenderThreadInfo *tInfo = RenderThreadInfo::get();
     tInfo->m_puid = puid;
 }
 
-static int rcCompose(uint32_t bufferSize, void* buffer) {
+int rcCompose(uint32_t bufferSize, void* buffer) {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
@@ -1180,7 +1055,7 @@ static int rcCompose(uint32_t bufferSize, void* buffer) {
     return fb->compose(bufferSize, buffer);
 }
 
-static int rcCreateDisplay(uint32_t* displayId) {
+int rcCreateDisplay(uint32_t* displayId) {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return -1;
@@ -1191,7 +1066,7 @@ static int rcCreateDisplay(uint32_t* displayId) {
     return fb->createDisplay(displayId);
 }
 
-static int rcDestroyDisplay(uint32_t displayId) {
+int rcDestroyDisplay(uint32_t displayId) {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return -1;
@@ -1200,7 +1075,7 @@ static int rcDestroyDisplay(uint32_t displayId) {
     return fb->destroyDisplay(displayId);
 }
 
-static int rcSetDisplayColorBuffer(uint32_t displayId, uint32_t colorBuffer) {
+int rcSetDisplayColorBuffer(uint32_t displayId, uint32_t colorBuffer) {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return -1;
@@ -1209,7 +1084,7 @@ static int rcSetDisplayColorBuffer(uint32_t displayId, uint32_t colorBuffer) {
     return fb->setDisplayColorBuffer(displayId, colorBuffer);
 }
 
-static int rcGetDisplayColorBuffer(uint32_t displayId, uint32_t* colorBuffer) {
+int rcGetDisplayColorBuffer(uint32_t displayId, uint32_t* colorBuffer) {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return -1;
@@ -1218,7 +1093,7 @@ static int rcGetDisplayColorBuffer(uint32_t displayId, uint32_t* colorBuffer) {
     return fb->getDisplayColorBuffer(displayId, colorBuffer);
 }
 
-static int rcGetColorBufferDisplay(uint32_t colorBuffer, uint32_t* displayId) {
+int rcGetColorBufferDisplay(uint32_t colorBuffer, uint32_t* displayId) {
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
         return -1;
@@ -1227,7 +1102,7 @@ static int rcGetColorBufferDisplay(uint32_t colorBuffer, uint32_t* displayId) {
     return fb->getColorBufferDisplay(colorBuffer, displayId);
 }
 
-static int rcGetDisplayPose(uint32_t displayId,
+int rcGetDisplayPose(uint32_t displayId,
                             int32_t* x,
                             int32_t* y,
                             uint32_t* w,
@@ -1240,7 +1115,7 @@ static int rcGetDisplayPose(uint32_t displayId,
     return fb->getDisplayPose(displayId, x, y, w, h);
 }
 
-static int rcSetDisplayPose(uint32_t displayId,
+int rcSetDisplayPose(uint32_t displayId,
                             int32_t x,
                             int32_t y,
                             uint32_t w,
@@ -1253,39 +1128,11 @@ static int rcSetDisplayPose(uint32_t displayId,
     return fb->setDisplayPose(displayId, x, y, w, h);
 }
 
-static int rcSetColorBufferVulkanMode(uint32_t colorBuffer, uint32_t mode) {
-    if (!goldfish_vk::isColorBufferVulkanCompatible(colorBuffer)) {
-        fprintf(
-            stderr,
-            "%s: error: colorBuffer 0x%x is not Vulkan compatible\n",
-            __func__, colorBuffer);
-        return -1;
-    }
-
-#define VULKAN_MODE_VULKAN_ONLY 1
-
-    bool modeIsVulkanOnly = mode == VULKAN_MODE_VULKAN_ONLY;
-
-    if (!goldfish_vk::setupVkColorBuffer(colorBuffer, modeIsVulkanOnly)) {
-        fprintf(
-            stderr,
-            "%s: error: failed to create VkImage for colorBuffer 0x%x\n",
-            __func__, colorBuffer);
-        return -1;
-    }
-
-    if (!goldfish_vk::setColorBufferVulkanMode(colorBuffer, mode)) {
-        fprintf(
-            stderr,
-            "%s: error: failed to set Vulkan mode for colorBuffer 0x%x\n",
-            __func__, colorBuffer);
-        return -1;
-    }
-
+int rcSetColorBufferVulkanMode(uint32_t colorBuffer, uint32_t mode) {
     return 0;
 }
 
-static void rcReadColorBufferYUV(uint32_t colorBuffer,
+void rcReadColorBufferYUV(uint32_t colorBuffer,
                                 GLint x, GLint y,
                                 GLint width, GLint height,
                                 void* pixels, uint32_t pixels_size)
@@ -1299,13 +1146,13 @@ static void rcReadColorBufferYUV(uint32_t colorBuffer,
     fb->readColorBufferYUV(colorBuffer, x, y, width, height, pixels, pixels_size);
 }
 
-static int rcIsSyncSignaled(uint64_t handle) {
+int rcIsSyncSignaled(uint64_t handle) {
     FenceSync* fenceSync = FenceSync::getFromHandle(handle);
     if (!fenceSync) return 1; // assume destroyed => signaled
     return fenceSync->isSignaled() ? 1 : 0;
 }
 
-static void rcCreateColorBufferWithHandle(
+void rcCreateColorBufferWithHandle(
     uint32_t width, uint32_t height, GLenum internalFormat, uint32_t handle)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
@@ -1319,6 +1166,31 @@ static void rcCreateColorBufferWithHandle(
         width, height, internalFormat,
         FRAMEWORK_FORMAT_GL_COMPATIBLE, handle);
 }
+
+void rcPushProcessName(const char* procName, uint32_t processNameSize)
+{
+    if (procName == nullptr || processNameSize <= 0) {
+        fprintf(stderr, "proceess name is null, size is %u", processNameSize);
+    }
+    FrameBuffer::getFB()->SetProcNameOfThread(procName, processNameSize);
+}
+
+bool rcUpdateYuv(uint32_t colorBuffer,
+                        GLint x, GLint y,
+                        GLint width, GLint height,
+                        GLenum format, GLenum type, int32_t yuvFormat, void* pixels)
+{
+    FrameBuffer *fb = FrameBuffer::getFB();
+    if (!fb) {
+        return false;
+    }
+
+    return fb->updateYuv(colorBuffer, x, y, width, height, format, type, yuvFormat, pixels);
+}
+
+#ifdef __cplusplus
+}
+#endif
 
 void initRenderControlContext(renderControl_decoder_context_t *dec)
 {

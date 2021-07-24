@@ -24,16 +24,6 @@ namespace emugl {
 // objects, initialized lazily in a thread-safe way. The instances are leaked on
 // program exit.
 
-struct LazyLoadedGLESv1Dispatch {
-    // Return pointer to global GLESv1Dispatch instance, or nullptr if there
-    // was an error when trying to initialize/load the library.
-    static const GLESv1Dispatch* get();
-
-    LazyLoadedGLESv1Dispatch();
-
-private:
-    bool mValid;
-};
 
 struct LazyLoadedGLESv2Dispatch {
     // Return pointer to global GLESv2Dispatch instance, or nullptr if there

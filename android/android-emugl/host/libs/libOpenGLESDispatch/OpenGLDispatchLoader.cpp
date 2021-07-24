@@ -18,34 +18,16 @@
 
 #include "OpenGLESDispatch/DispatchTables.h"
 
-GLESv1Dispatch s_gles1;
 GLESv2Dispatch s_gles2;
 
 using android::base::LazyInstance;
-using emugl::LazyLoadedGLESv1Dispatch;
 using emugl::LazyLoadedGLESv2Dispatch;
 using emugl::LazyLoadedEGLDispatch;
 
 // Must be declared outside of LazyLoaded*Dispatch scope due to the use of
 // sizeof(T) within the template definition.
-LazyInstance<LazyLoadedGLESv1Dispatch> sGLESv1Dispatch = LAZY_INSTANCE_INIT;
 LazyInstance<LazyLoadedGLESv2Dispatch> sGLESv2Dispatch = LAZY_INSTANCE_INIT;
 LazyInstance<LazyLoadedEGLDispatch> sEGLDispatch = LAZY_INSTANCE_INIT;
-
-// static
-const GLESv1Dispatch* LazyLoadedGLESv1Dispatch::get() {
-    LazyLoadedGLESv1Dispatch* instance = sGLESv1Dispatch.ptr();
-    if (instance->mValid) {
-        return &s_gles1;
-    } else {
-        return nullptr;
-    }
-}
-
-LazyLoadedGLESv1Dispatch::LazyLoadedGLESv1Dispatch() {
-    LazyLoadedEGLDispatch::get();
-    mValid = gles1_dispatch_init(&s_gles1);
-}
 
 // static
 const GLESv2Dispatch* LazyLoadedGLESv2Dispatch::get() {

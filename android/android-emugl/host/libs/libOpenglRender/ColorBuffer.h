@@ -27,7 +27,8 @@
 #include "FrameworkFormats.h"
 #include "Hwc2.h"
 #include "RenderContext.h"
-
+#include "YuvDraw.h"
+#include "GLESv2Dispatch.h"
 #include <memory>
 
 class TextureDraw;
@@ -75,6 +76,7 @@ public:
         virtual void teardownContext() = 0;
         virtual TextureDraw* getTextureDraw() const = 0;
         virtual bool isBound() const = 0;
+		virtual std::shared_ptr<YuvDraw<GLESv2Dispatch *>> getYuvDraw() const = 0;
     };
 
     // Helper class to use a ColorBuffer::Helper context.
@@ -198,6 +200,14 @@ public:
 
     // Reads back entire contents, tightly packed rows.
     bool readContents(size_t* numBytes, void* pixels);
+	void updateYuv(int x,
+                   int y,
+                   int width,
+                   int height,
+                   GLenum p_format,
+                   GLenum p_type,
+                   int32_t yuvFormat,
+                   void *pixels);
 
     // Draw a ColorBuffer instance, i.e. blit it to the current guest
     // framebuffer object / window surface. This doesn't display anything.

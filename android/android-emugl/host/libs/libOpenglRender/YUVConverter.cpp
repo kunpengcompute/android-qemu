@@ -70,8 +70,7 @@ static void getYUVOffsets(int width, int height, FrameworkFormat format,
         *alignwidthc = cStride;
         break;
     case FRAMEWORK_FORMAT_YUV_420_888:
-        if (emugl::emugl_feature_is_enabled(
-            android::featurecontrol::YUV420888toNV21)) {
+        if (false) {
             align = 1;
             yStride = (width + (align - 1)) & ~(align - 1);
             cStride = yStride;
@@ -554,8 +553,7 @@ void YUVConverter::init(int width, int height, FrameworkFormat format) {
                               &mPosLoc);
             break;
         case FRAMEWORK_FORMAT_YUV_420_888:
-            if (emugl::emugl_feature_is_enabled(
-                    android::featurecontrol::YUV420888toNV21)) {
+            if (false) {
                 if (!mVUtex)
                     createYUVGLTex(GL_TEXTURE1, cwidth, cheight, &mVUtex, true);
                 createYUVInterleavedGLShader(&mProgram,
@@ -642,8 +640,7 @@ void YUVConverter::readPixels(uint8_t* pixels, uint32_t pixels_size) {
                   &cwidth);
 
     if (mFormat == FRAMEWORK_FORMAT_YUV_420_888) {
-        if (emugl::emugl_feature_is_enabled(
-                    android::featurecontrol::YUV420888toNV21)) {
+        if (false) {
             readYUVTex(mVUtex, pixels + voff, true);
             DDD("done");
         } else {
@@ -757,8 +754,7 @@ void YUVConverter::drawConvert(int x, int y,
                                 false);
             break;
         case FRAMEWORK_FORMAT_YUV_420_888:
-            if (emugl::emugl_feature_is_enabled(
-                android::featurecontrol::YUV420888toNV21)) {
+            if (false) {
                 subUpdateYUVGLTex(GL_TEXTURE1, mVUtex,
                                   x, y, cwidth, cheight,
                                   pixels + voff, true);

@@ -23,7 +23,7 @@
 
 #include "ColorBuffer.h"
 #include "emugl/common/mutex.h"
-#include "FbConfig.h"
+#include "FbConfigMy.h"
 #include "GLESVersionDetector.h"
 #include "Hwc2.h"
 #include "PostWorker.h"
@@ -32,7 +32,6 @@
 #include "TextureDraw.h"
 #include "WindowSurface.h"
 
-#include "OpenglRender/render_api.h"
 #include "OpenglRender/Renderer.h"
 
 #include <EGL/egl.h>
@@ -107,7 +106,7 @@ public:
     // own sub-windows. If false, this means the caller will use
     // setPostCallback() instead to retrieve the content.
     // Returns true on success, false otherwise.
-    static bool initialize(int width, int height, bool useSubWindow,
+    static bool initialize(int width, int height, unsigned int guest_width, unsigned int guest_height, bool useSubWindow,
             bool egl2egl);
 
     // Setup a sub-window to display the content of the emulated GPU
@@ -128,11 +127,10 @@ public:
     // Return true on success, false otherwise.
     //
     // NOTE: This can return false for software-only EGL engines like OSMesa.
-    bool setupSubWindow(FBNativeWindowType p_window,
-                        int wx, int wy,
-                        int ww, int wh,
-                        int fbw, int fbh, float dpr, float zRot,
-                        bool deleteExisting);
+    bool setupSubWindow(EGLNativeWindowType p_window,
+                        int x, int y,
+                        int width, int height,
+                        float zRot);
 
     // Remove the sub-window created by setupSubWindow(), if any.
     // Return true on success, false otherwise.
@@ -278,7 +276,7 @@ public:
     // ColorBuffer. See the documentation for WindowSurface::flushColorBuffer()
     // |p_surface| is the target WindowSurface's handle value.
     // Returns true on success, false on failure.
-    bool  flushWindowSurfaceColorBuffer(HandleType p_surface);
+    bool  flushWindowSurfaceColorBuffer(HandleType p_surface, EGLint *rects, EGLint rectsNum);
 
     // Retrieves the color buffer handle associated with |p_surface|.
     // Returns 0 if there is no such handle.
@@ -383,6 +381,9 @@ public:
                             int* width,
                             int* height,
                             GLint* internalformat);
+	bool updateYuv(HandleType p_colorbuffer,
+                   int x, int y, int width, int height,
+                   GLenum format, GLenum type, int32_t yuvFormat, void *pixels);
 
     // Display the content of a given ColorBuffer into the framebuffer's
     // sub-window. |p_colorbuffer| is a handle value.
@@ -444,7 +445,7 @@ public:
     // Return a TextureDraw instance that can be used with this surfaces
     // and windows created by this instance.
     TextureDraw* getTextureDraw() const { return m_textureDraw; }
-
+	std::shared_ptr<YuvDraw<GLESv2Dispatch *>> getYuvDraw() const { return m_yuvDraw; }
     // Create an eglImage and return its handle.  Reference:
     // https://www.khronos.org/registry/egl/extensions/KHR/EGL_KHR_image_base.txt
     HandleType createClientImage(HandleType context, EGLenum target, GLuint buffer);
@@ -568,9 +569,28 @@ public:
     EGLContext getGlobalEGLContext() { return m_pbufContext; }
     HandleType getLastPostedColorBuffer() { return m_lastPostedColorBuffer; }
     void waitForGpu(uint64_t eglsync);
-
+    void SetProcNameOfThread(const char* procName, uint32_t processNameSize);
+    EGLint getMatchConfigs(EGLint hostConfig);
+    unsigned int getGuestWidth() {
+        return m_guestWidth;
+    }
+    unsigned int getGuestHeight() {
+        return m_guestHeight;
+    }
+    void setRotation(int rotation) {
+        this->rotation = rotation;
+        m_zRot = 90 * this->rotation;
+        if (m_zRot == 90) {
+            m_zRot = 270;
+        } else if (m_zRot == 270) {
+            m_zRot = 90;
+        }
+    }
+    int getRotation() const {
+        return rotation;
+    }
 private:
-    FrameBuffer(int p_width, int p_height, bool useSubWindow);
+    FrameBuffer(int p_width, int p_height, unsigned int guestWidth, unsigned int guestHeight, bool useSubWindow);
     HandleType genHandle_locked();
 
     bool bindSubwin_locked();
@@ -615,6 +635,8 @@ private:
     int m_framebufferHeight = 0;
     int m_windowWidth = 0;
     int m_windowHeight = 0;
+	unsigned int m_guestWidth = 0;
+    unsigned int m_guestHeight = 0;
     float m_dpr = 0;
 
     bool m_useSubWindow = false;
@@ -628,7 +650,7 @@ private:
     emugl::Mutex m_lock;
     emugl::ReadWriteMutex m_contextStructureLock;
     FbConfigList* m_configs = nullptr;
-    FBNativeWindowType m_nativeWindow = 0;
+    EGLNativeWindowType m_nativeWindow = 0;
     FrameBufferCaps m_caps = {};
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
     RenderContextMap m_contexts;
@@ -668,6 +690,7 @@ private:
     EGLSurface m_prevDrawSurf = EGL_NO_SURFACE;
     EGLNativeWindowType m_subWin = {};
     TextureDraw* m_textureDraw = nullptr;
+    std::shared_ptr<YuvDraw<GLESv2Dispatch *>> m_yuvDraw = nullptr;
     EGLConfig  m_eglConfig = nullptr;
     HandleType m_lastPostedColorBuffer = 0;
     float      m_zRot = 0;
@@ -751,6 +774,7 @@ private:
         Clear = 3,
         Screenshot = 4,
         Exit = 5,
+        ResetSubWindow = 6,
     };
 
     struct Post {
@@ -784,5 +808,6 @@ private:
 
     android::base::MessageChannel<HandleType, 1024>
         mOutstandingColorBufferDestroys;
+    int rotation = 0;
 };
 #endif

@@ -175,6 +175,8 @@ private:
 
 template <class T>
 T* LazyInstance<T>::ptrInternal() const {
+    static T data;
+    return &data;
     // Make sure that LazyInstance<> instantiation remains static.
     // NB: this can't go in a class scope as class is still incomplete there.
     static_assert(std::is_standard_layout<LazyInstance>::value,
