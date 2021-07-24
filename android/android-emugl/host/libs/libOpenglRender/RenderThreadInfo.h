@@ -50,8 +50,9 @@ struct RenderThreadInfo {
 
     // Decoder states.
     GLESv2Decoder                   m_gl2Dec;
+#ifndef __ANDROID__
     renderControl_decoder_context_t m_rcDec;
-
+#endif
 	uint32_t m_pid;
     uint32_t m_tid;
 

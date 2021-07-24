@@ -17,8 +17,9 @@
 #define _RENDER_CONTROL_H
 
 #include "renderControl_dec.h"
-
+#ifndef __ANDROID__
 void initRenderControlContext(renderControl_decoder_context_t *dec);
+#endif
 void registerTriggerWait();
 
 #endif

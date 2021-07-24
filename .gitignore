@@ -202,3 +202,6 @@ docker-src.*
 /.gradle
 /.settings
 /.project
+./output
+./cmake/build
+android/android-emugl/host/tools/emugen/cmake/build/

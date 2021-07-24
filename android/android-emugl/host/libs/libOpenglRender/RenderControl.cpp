@@ -1191,7 +1191,7 @@ bool rcUpdateYuv(uint32_t colorBuffer,
 #ifdef __cplusplus
 }
 #endif
-
+#ifndef __ANDROID__ 
 void initRenderControlContext(renderControl_decoder_context_t *dec)
 {
     dec->rcGetRendererVersion = rcGetRendererVersion;
@@ -1244,3 +1244,4 @@ void initRenderControlContext(renderControl_decoder_context_t *dec)
     dec->rcIsSyncSignaled = rcIsSyncSignaled;
     dec->rcCreateColorBufferWithHandle = rcCreateColorBufferWithHandle;
 }
+#endif
