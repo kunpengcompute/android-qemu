@@ -248,6 +248,7 @@ void FrameBuffer::finalize() {
             s_egl.eglDestroySurface(m_eglDisplay, m_eglSurface);
             m_eglSurface = EGL_NO_SURFACE;
         }
+        s_egl.eglTerminate(m_eglDisplay);
         m_eglDisplay = EGL_NO_DISPLAY;
     }
 
@@ -274,7 +275,7 @@ bool FrameBuffer::initialize(int width, int height, unsigned int guest_width, un
         bool egl2egl) {
     GL_LOG("FrameBuffer::initialize");
     if (s_theFrameBuffer != NULL) {
-        return true;
+        GL_LOG("FrameBuffer Reinitialize");
     }
 
     //
