@@ -16,7 +16,6 @@
 #include "WindowSurface.h"
 
 #include "ErrorLog.h"
-#include "FbConfig.h"
 #include "FrameBuffer.h"
 
 #include "OpenGLESDispatch/EGLDispatch.h"
@@ -90,7 +89,7 @@ void WindowSurface::bind(RenderContextPtr p_ctx, BindType p_bindType) {
 GLuint WindowSurface::getWidth() const { return mWidth; }
 GLuint WindowSurface::getHeight() const { return mHeight; }
 
-bool WindowSurface::flushColorBuffer() {
+bool WindowSurface::flushColorBuffer(EGLint *rects, EGLint rectsNum) {
     if (!mAttachedColorBuffer.get()) {
         return true;
     }

@@ -15,7 +15,6 @@
 */
 #include "OpenGLESDispatch/StaticDispatch.h"
 
-#include "OpenGLESDispatch/EGLDispatch.h"
 #include "OpenGLESDispatch/GLESv1Dispatch.h"
 #include "OpenGLESDispatch/GLESv2Dispatch.h"
 #include "OpenGLESDispatch/DispatchTables.h"
@@ -26,12 +25,6 @@
 
 void* gles1_dispatch_get_proc_func_static(const char* name) {
     void* func = 0;
-
-#define RETURN_GLES1_STATIC(return_type,function_name,signature,callargs)\
-    if (!strcmp(#function_name, name)) { func = (void*)(s_gles1.function_name); } \
-
-    LIST_GLES1_FUNCTIONS(RETURN_GLES1_STATIC, RETURN_GLES1_STATIC);
-
     return func;
 }
 

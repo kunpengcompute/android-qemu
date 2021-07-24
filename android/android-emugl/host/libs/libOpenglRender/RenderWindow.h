@@ -15,11 +15,12 @@
 #ifndef ANDROID_EMUGL_LIBRENDER_RENDER_WINDOW_H
 #define ANDROID_EMUGL_LIBRENDER_RENDER_WINDOW_H
 
-#include "OpenglRender/render_api.h"
 
 #include "android/base/synchronization/MessageChannel.h"
 #include "android/base/threads/FunctorThread.h"
 #include "emugl/common/thread.h"
+#include "OpenglRender/Renderer.h"
+#include "EGL/eglplatform.h"
 
 class RenderWindowChannel;
 struct RenderWindowMessage;
@@ -59,8 +60,7 @@ public:
     //
     // Note that this call doesn't display anything, it just initializes
     // the library, use setupSubWindow() to display something.
-    RenderWindow(int width, int height, bool use_thread, bool use_sub_window,
-            bool egl2egl);
+    RenderWindow(int width, int height, unsigned guestWidth, unsigned guestHeight, bool use_thread, bool use_sub_window);
 
     // Destructor. This will automatically call removeSubWindow() is needed.
     ~RenderWindow();
@@ -102,16 +102,12 @@ public:
     // pipeline to reflect the new values.
     //
     // One can call removeSubWindow() to remove the sub-window.
-    bool setupSubWindow(FBNativeWindowType window,
-                        int wx,
-                        int wy,
-                        int ww,
-                        int wh,
-                        int fbw,
-                        int fbh,
-                        float dpr,
-                        float rotation,
-                        bool deleteExisting);
+    bool setupSubWindow(EGLNativeWindowType window,
+                        int x,
+                        int y,
+                        int width,
+                        int height,
+                        float zRot);
 
     // Remove the sub-window created by calling setupSubWindow().
     // Note that this doesn't discard the content of the emulated framebuffer,

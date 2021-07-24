@@ -38,14 +38,28 @@ void gles2_unimplemented() {
 
 #define LOOKUP_SYMBOL_STATIC(return_type,function_name,signature,callargs) \
     dispatch_table-> function_name = reinterpret_cast< function_name ## _t >( \
-            translator::gles2::function_name); \
+            s_gles2_lib->findSymbol(#function_name)); \
     if ((!dispatch_table-> function_name) && s_egl.eglGetProcAddress) \
         dispatch_table-> function_name = reinterpret_cast< function_name ## _t >( \
             s_egl.eglGetProcAddress(#function_name)); \
 
 bool gles2_dispatch_init(GLESv2Dispatch* dispatch_table) {
     if (dispatch_table->initialized) return true;
-
+    const char *libName = getenv("ANDROID_GLESv2_LIB");
+    if (!libName) {
+#if defined(__LP64__)
+        libName = "/system/lib64/libGLESv2.so";
+#else
+        libName = "/system/lib/libGLESv2.so";
+#endif
+    }
+    char error[256];
+    s_gles2_lib = emugl::SharedLibrary::open(libName, error, sizeof(error));
+    if (!s_gles2_lib) {
+        fprintf(stderr, "%s: Could not load %s [%s]\n", __FUNCTION__,
+                libName, error);
+        return false;
+    }
     LIST_GLES2_FUNCTIONS(LOOKUP_SYMBOL_STATIC,LOOKUP_SYMBOL_STATIC)
    
     dispatch_table->initialized = true;

@@ -44,6 +44,8 @@ public:
     // if there is no last posted color buffer to show yet.
     void clear();
 
+    void resetSubWindow();
+
     void screenshot(
         ColorBuffer* cb,
         int screenwidth,

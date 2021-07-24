@@ -585,3 +585,23 @@ GL_ENTRY(void, glDrawElementsDataNullAEMU, GLenum mode, GLsizei count, GLenum ty
 # Async UnmapBuffer (also distinguishes sending arbitrary length buffer)
 GL_ENTRY(void, glUnmapBufferAsyncAEMU, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access, void* guest_buffer, GLboolean* out_res)
 GL_ENTRY(void, glFlushMappedBufferRangeAEMU2, GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access, void* guest_buffer)
+
+# Add EXT
+GL_ENTRY(void, glEnableiEXT, GLenum target, GLuint index);
+GL_ENTRY(void, glDisableiEXT, GLenum target, GLuint index);
+GL_ENTRY(void, glBlendEquationiEXT, GLuint buf, GLenum mode);
+GL_ENTRY(void, glBlendEquationSeparateiEXT, GLuint buf, GLenum modeRGB, GLenum modeAlpha);
+GL_ENTRY(void, glBlendFunciEXT, GLenum target, GLuint index);
+GL_ENTRY(void, glBlendFuncSeparateiEXT, GLuint buf, GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
+GL_ENTRY(void, glColorMaskiEXT, GLuint index, GLboolean r, GLboolean g, GLboolean b, GLboolean a);
+GL_ENTRY(void, glIsEnablediEXT, GLenum target, GLuint index);
+GL_ENTRY(void, glCopyImageSubDataEXT, GLuint srcName, GLenum srcTarget, GLint srcLevel, GLint srcX, GLint srcY, GLint srcZ, GLuint dstName, GLenum dstTarget, GLint dstLevel, GLint dstX, GLint dstY, GLint dstZ, GLsizei srcWidth, GLsizei srcHeight, GLsizei srcDepth);
+GL_ENTRY(void, glBlendBarrierKHR, void);
+GL_ENTRY(void, glTexParameterIivEXT, GLenum target, GLenum pname, const GLint *params);
+GL_ENTRY(void, glTexParameterIuivEXT, GLenum target, GLenum pname, const GLuint *params);
+GL_ENTRY(void, glGetTexParameterIivEXT, GLenum target, GLenum pname, GLint *params);
+GL_ENTRY(void, glGetTexParameterIuivEXT, GLenum target, GLenum pname, GLuint *params);
+GL_ENTRY(void, glSamplerParameterIivEXT, GLuint sampler, GLenum pname, const GLint *param);
+GL_ENTRY(void, glSamplerParameterIuivEXT, GLuint sampler, GLenum pname, const GLuint *param);
+GL_ENTRY(void, glGetSamplerParameterIivEXT, GLuint sampler, GLenum pname, GLint *params);
+GL_ENTRY(void, glGetSamplerParameterIuivEXT, GLuint sampler, GLenum pname, GLuint *params);

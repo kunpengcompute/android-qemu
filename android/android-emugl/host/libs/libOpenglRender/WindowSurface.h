@@ -61,7 +61,7 @@ public:
     // Copy the Pbuffer's pixels to the attached color buffer.
     // Returns true on success, or false on error (e.g. if there is no
     // attached color buffer).
-    bool flushColorBuffer();
+    bool flushColorBuffer(EGLint *rects, EGLint rectsNum);
 
     // Used by bind() below.
     enum BindType {

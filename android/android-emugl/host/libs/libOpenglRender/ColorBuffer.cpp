@@ -18,7 +18,6 @@
 #include "android/base/memory/ScopedPtr.h"
 
 #include "DispatchTables.h"
-#include "GLcommon/GLutils.h"
 #include "RenderThreadInfo.h"
 #include "TextureDraw.h"
 #include "TextureResize.h"
@@ -38,6 +37,10 @@
 #else
 #define DEBUG_CB_FBO 1
 #endif
+
+static void* SafePointerFromUInt(unsigned int handle) {
+    return (void*)(uintptr_t)(handle);
+}
 
 namespace {
 
@@ -281,7 +284,6 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
             p_display, s_egl.eglGetCurrentContext(), EGL_GL_TEXTURE_2D_KHR,
             (EGLClientBuffer)SafePointerFromUInt(cb->m_blitTex), NULL);
 
-    cb->m_resizer = new TextureResize(p_width, p_height);
 
     cb->m_frameworkFormat = p_frameworkFormat;
     switch (cb->m_frameworkFormat) {
@@ -343,8 +345,6 @@ ColorBuffer::~ColorBuffer() {
     if (m_memoryObject) {
         s_gles2.glDeleteMemoryObjectsEXT(1, &m_memoryObject);
     }
-
-    delete m_resizer;
 }
 
 void ColorBuffer::readPixels(int x,
@@ -383,7 +383,7 @@ void ColorBuffer::readPixelsScaled(int width,
     }
     p_format = sGetUnsizedColorBufferFormat(p_format);
     touch();
-    GLuint tex = m_resizer->update(m_tex, width, height, rotation);
+    GLuint tex = m_tex;
     if (bindFbo(&m_scaleRotationFbo, tex)) {
         GLint prevAlignment = 0;
         s_gles2.glGetIntegerv(GL_PACK_ALIGNMENT, &prevAlignment);
@@ -574,6 +574,21 @@ bool ColorBuffer::replaceContents(const void* newContents, size_t numBytes) {
     return true;
 }
 
+void ColorBuffer::updateYuv(int x,
+                            int y,
+                            int width,
+                            int height,
+                            GLenum p_format,
+                            GLenum p_type,
+                            int32_t yuvFormat,
+                            void* pixels) {
+    RecursiveScopedHelperContext context(m_helper);
+	bindFbo(&m_fbo, m_tex);
+	m_helper->getYuvDraw()->Draw(x, y, width, height, yuvFormat, static_cast<uint8_t *>(pixels));
+    s_gles2.glFinish();
+	unbindFbo();
+}
+
 bool ColorBuffer::readContents(size_t* numBytes, void* pixels) {
     RecursiveScopedHelperContext context(m_helper);
     *numBytes = m_numBytes;
@@ -637,11 +652,9 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                     s_gles2.glBindFramebuffer(GL_FRAMEBUFFER, 0);
                 }
             }
-
+            bool scissor_test_enabled = false;
             // If the read buffer is multisampled, we need to resolve.
-            GLint samples;
-            s_gles2.glGetIntegerv(GL_SAMPLE_BUFFERS, &samples);
-            if (isGles3 && samples > 0) {
+            if (isGles3) {
                 s_gles2.glBindTexture(GL_TEXTURE_2D, 0);
 
                 GLuint resolve_fbo;
@@ -653,12 +666,40 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                 s_gles2.glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,
                         GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                         tmpTex, 0);
+                if (s_gles2.glIsEnabled(GL_SCISSOR_TEST)) {
+                    s_gles2.glDisable(GL_SCISSOR_TEST);
+                    scissor_test_enabled = true;
+                }
                 s_gles2.glBlitFramebuffer(0, 0, m_width, m_height, 0, 0, m_width,
                         m_height, GL_COLOR_BUFFER_BIT,
                         GL_NEAREST);
+                if (scissor_test_enabled) {
+                    s_gles2.glEnable(GL_SCISSOR_TEST);
+                }
+                if (m_clearFb) {
+                    m_clearFb = false;
+                    // cocos应用有一个不刷新的colorbuffer，在mate30上会导致花屏，因此对特殊处理
+                    // cocos应用第一次flush时清空framebuffer数据,避免花屏
+                    if (RenderThreadInfo::get()->procName == "org.cocos2d.examplecases") {
+                        ERR("is cocos");
+                        s_gles2.glClearColor(0.0, 0.0, 0.0, 0.0);
+                        s_gles2.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        s_gles2.glClear(GL_COLOR_BUFFER_BIT);
+                    }
+                }
                 s_gles2.glBindFramebuffer(GL_DRAW_FRAMEBUFFER,
                         (GLuint)prev_draw_fbo);
 
+                if (m_clearOrgFb) {
+                    m_clearOrgFb = false;
+                    // cocos应用有一个不刷新的colorbuffer，在mate30上会导致花屏，因此对特殊处理
+                    // cocos应用第一次flush时清空framebuffer数据,避免花屏
+                    if (RenderThreadInfo::get()->procName == "org.cocos2d.examplecases") {
+                        s_gles2.glClearColor(0.0, 0.0, 0.0, 0.0);
+                        s_gles2.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+                        s_gles2.glClear(GL_COLOR_BUFFER_BIT);
+                    }
+                }
                 s_gles2.glDeleteFramebuffers(1, &resolve_fbo);
                 s_gles2.glBindTexture(GL_TEXTURE_2D, tmpTex);
             } else {
@@ -703,20 +744,13 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                 s_gles2.glBindFramebuffer(GL_FRAMEBUFFER, 0);
             }
 
-            s_gles1.glGetIntegerv(GL_TEXTURE_BINDING_2D, &currTexBind);
-            s_gles1.glGenTextures(1, &tmpTex);
-            s_gles1.glBindTexture(GL_TEXTURE_2D, tmpTex);
-            s_gles1.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_blitEGLImage);
-            s_gles1.glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, m_width,
-                    m_height);
-            s_gles1.glDeleteTextures(1, &tmpTex);
-            s_gles1.glBindTexture(GL_TEXTURE_2D, currTexBind);
+            ERR("not support gles 1.0");
 
             if (prev_fbo != 0) {
                 s_gles2.glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
             }
         }
-
+        EGLSyncKHR m_fence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
         RecursiveScopedHelperContext context(m_helper);
         if (!context.isOk()) {
             return false;
@@ -732,7 +766,9 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
         };
         s_gles2.glGetIntegerv(GL_VIEWPORT, vport);
         s_gles2.glViewport(0, 0, m_width, m_height);
-
+        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, m_fence,
+                                                EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
+        s_egl.eglDestroySyncKHR(m_display, m_fence);
         // render m_blitTex
         m_helper->getTextureDraw()->draw(m_blitTex, 0., 0, 0);
 
@@ -758,7 +794,7 @@ bool ColorBuffer::bindToTexture() {
     if (tInfo->currContext->clientVersion() > GLESApi_CM) {
         s_gles2.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_eglImage);
     } else {
-        s_gles1.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_eglImage);
+        ERR("not support gles 1.0");
     }
     return true;
 }
@@ -785,14 +821,13 @@ bool ColorBuffer::bindToRenderbuffer() {
         s_gles2.glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER_OES,
                                                        m_eglImage);
     } else {
-        s_gles1.glEGLImageTargetRenderbufferStorageOES(GL_RENDERBUFFER_OES,
-                                                       m_eglImage);
+        ERR("not support gles 1.0");
     }
     return true;
 }
 
 GLuint ColorBuffer::scale() {
-    return m_resizer->update(m_tex);
+    return m_tex;
 }
 
 void ColorBuffer::setSync(bool debug) {
@@ -816,6 +851,8 @@ bool ColorBuffer::post(GLuint tex, float rotation, float dx, float dy) {
 bool ColorBuffer::postWithOverlay(GLuint tex, float rotation, float dx, float dy) {
     // NOTE: Do not call m_helper->setupContext() here!
     waitSync();
+    dx = 0.0;
+    dy = 0.0;
     return m_helper->getTextureDraw()->drawWithOverlay(tex, rotation, dx, dy);
 }
 
@@ -911,7 +948,6 @@ void ColorBuffer::restore() {
     s_gles2.glBindTexture(GL_TEXTURE_2D, m_blitTex);
     s_gles2.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_blitEGLImage);
 
-    m_resizer = new TextureResize(m_width, m_height);
     switch (m_frameworkFormat) {
         case FRAMEWORK_FORMAT_GL_COMPATIBLE:
             break;

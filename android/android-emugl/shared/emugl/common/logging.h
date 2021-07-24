@@ -19,6 +19,7 @@
 #include "android/utils/debug.h"
 
 #include "OpenglRender/render_api_types.h"
+#include "ErrorLog.h"
 
 #ifdef _MSC_VER
 # ifdef BUILDING_EMUGL_COMMON_SHARED
@@ -42,15 +43,9 @@ EMUGL_COMMON_API void set_emugl_cxt_logger(emugl_logger_t f);
 
 #if GL_LOGGING
 
-#define GL_LOG(...)                       \
-    do {                                  \
-        emugl::emugl_logger(__VA_ARGS__); \
-    } while (0)
+#define GL_LOG INFO
 
-#define GL_CXT_LOG(...)                       \
-    do {                                      \
-        emugl::emugl_cxt_logger(__VA_ARGS__); \
-    } while (0)
+#define GL_CXT_LOG INFO
 
 #else
 #define GL_LOG(...) 0

@@ -19,10 +19,8 @@
 #include "android/base/files/Stream.h"
 #include "RenderContext.h"
 #include "WindowSurface.h"
-#include "GLESv1Decoder.h"
 #include "GLESv2Decoder.h"
 #include "renderControl_dec.h"
-#include "VkDecoder.h"
 #include "StalePtrRegistry.h"
 #include "SyncThread.h"
 
@@ -37,7 +35,7 @@ struct RenderThreadInfo {
     // Create new instance. Only call this once per thread.
     // Future callls to get() will return this instance until
     // it is destroyed.
-    RenderThreadInfo();
+    RenderThreadInfo(uint32_t pid, uint32_t tid);
 
     // Destructor.
     ~RenderThreadInfo();
@@ -51,10 +49,12 @@ struct RenderThreadInfo {
     WindowSurfacePtr currReadSurf;
 
     // Decoder states.
-    GLESv1Decoder                   m_glDec;
     GLESv2Decoder                   m_gl2Dec;
+#ifndef __ANDROID__
     renderControl_decoder_context_t m_rcDec;
-    VkDecoder                       m_vkDec;
+#endif
+	uint32_t m_pid;
+    uint32_t m_tid;
 
     // All the contexts that are created by this render thread.
     // New emulator manages contexts in guest process level,
@@ -66,7 +66,7 @@ struct RenderThreadInfo {
 
     // The unique id of owner guest process of this render thread
     uint64_t                        m_puid = 0;
-
+	std::string procName = {}; // serverside process which this render thread belongs to
     // Functions to save / load a snapshot
     // They must be called after Framebuffer snapshot
     void onSave(android::base::Stream* stream);

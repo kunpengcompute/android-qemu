@@ -411,7 +411,7 @@ APosixStatus path_copy_file_impl(const char*  dest, const char*  source) {
             if (HANDLE_EINTR(write(fd, buf, n)) != n) {
                 /* write failed. Make it return -1 so that an
                  * empty file be created. */
-                D("Failed to copy '%s' to '%s': %s (%d)",
+                printf("Failed to copy '%s' to '%s': %s (%d)",
                        source, dest, strerror(errno), errno);
                 result = -1;
                 break;
@@ -437,7 +437,7 @@ path_copy_file( const char*  dest, const char*  source )
         return status;
     }
     if (android_access(source, R_OK) < 0) {
-        D("%s: source file is un-readable: %s\n",
+        printf("%s: source file is un-readable: %s\n",
           __FUNCTION__, source);
 
         // If the |source| exists but unreadable, create empty |dest| before

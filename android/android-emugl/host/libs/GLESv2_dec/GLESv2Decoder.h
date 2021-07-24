@@ -17,7 +17,7 @@
 #ifndef _GL2_DECODER_H_
 #define _GL2_DECODER_H_
 
-#include "gles2_dec.h"
+#include "gles2_server_context.h"
 #include "GLDecoderContextData.h"
 #include "emugl/common/shared_library.h"
 
@@ -26,7 +26,7 @@
 typedef void (gles2_APIENTRY *glVertexAttribPointerWithDataSize_server_proc_t) (GLuint, GLint, GLenum, GLboolean, GLsizei, const GLvoid*, GLsizei);
 typedef void (gles2_APIENTRY *glVertexAttribIPointerWithDataSize_server_proc_t) (GLuint, GLint, GLenum, GLsizei, const GLvoid*, GLsizei);
 
-struct gles2_decoder_extended_context : gles2_decoder_context_t {
+struct gles2_decoder_extended_context : gles2_server_context_t {
     glVertexAttribPointerWithDataSize_server_proc_t glVertexAttribPointerWithDataSize;
     glVertexAttribIPointerWithDataSize_server_proc_t glVertexAttribIPointerWithDataSize;
 

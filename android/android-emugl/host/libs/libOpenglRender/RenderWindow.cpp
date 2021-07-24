@@ -77,6 +77,8 @@ struct RenderWindowMessage {
         struct {
             int width;
             int height;
+            unsigned guestWidth;
+            unsigned guestHeight;
             bool useSubWindow;
             bool egl2egl;
         } init;
@@ -91,14 +93,11 @@ struct RenderWindowMessage {
 
         // CMD_SETUP_SUBWINDOW
         struct {
-            FBNativeWindowType parent;
-            int wx;
-            int wy;
-            int ww;
-            int wh;
-            int fbw;
-            int fbh;
-            float dpr;
+            EGLNativeWindowType parent;
+            int x;
+            int y;
+            int w;
+            int h;
             float rotation;
             bool deleteExisting;
         } subwindow;
@@ -128,6 +127,8 @@ struct RenderWindowMessage {
                        msg.init.width, msg.init.height);
                 result = FrameBuffer::initialize(msg.init.width,
                                                  msg.init.height,
+			                                     msg.init.guestWidth,
+			                                     msg.init.guestHeight,
                                                  msg.init.useSubWindow,
                                                  msg.init.egl2egl);
                 break;
@@ -156,37 +157,20 @@ struct RenderWindowMessage {
                 break;
 
             case CMD_SETUP_SUBWINDOW:
-                GL_LOG("CMD_SETUP_SUBWINDOW: parent=%p wx=%d wy=%d ww=%d wh=%d fbw=%d fbh=%d dpr=%f rotation=%f",
-                       (void*)(intptr_t)msg.subwindow.parent,
-                       msg.subwindow.wx,
-                       msg.subwindow.wy,
-                       msg.subwindow.ww,
-                       msg.subwindow.wh,
-                       msg.subwindow.fbw,
-                       msg.subwindow.fbh,
-                       msg.subwindow.dpr,
-                       msg.subwindow.rotation);
-                D("CMD_SETUP_SUBWINDOW: parent=%p wx=%d wy=%d ww=%d wh=%d fbw=%d fbh=%d dpr=%f rotation=%f\n",
-                    (void*)(intptr_t)msg.subwindow.parent,
-                    msg.subwindow.wx,
-                    msg.subwindow.wy,
-                    msg.subwindow.ww,
-                    msg.subwindow.wh,
-                    msg.subwindow.fbw,
-                    msg.subwindow.fbh,
-                    msg.subwindow.dpr,
+                D("CMD_SETUP_SUBWINDOW: parent=%p x=%d y=%d w=%d h=%d rotation=%f\n",
+                    (void*)msg.subwindow.parent,
+                    msg.subwindow.x,
+                    msg.subwindow.y,
+                    msg.subwindow.w,
+                    msg.subwindow.h,
                     msg.subwindow.rotation);
                 result = FrameBuffer::getFB()->setupSubWindow(
                         msg.subwindow.parent,
-                        msg.subwindow.wx,
-                        msg.subwindow.wy,
-                        msg.subwindow.ww,
-                        msg.subwindow.wh,
-                        msg.subwindow.fbw,
-                        msg.subwindow.fbh,
-                        msg.subwindow.dpr,
-                        msg.subwindow.rotation,
-                        msg.subwindow.deleteExisting);
+                        msg.subwindow.x,
+                        msg.subwindow.y,
+                        msg.subwindow.w,
+                        msg.subwindow.h,
+                        msg.subwindow.rotation);
                 break;
 
             case CMD_REMOVE_SUBWINDOW:
@@ -366,9 +350,10 @@ private:
 
 RenderWindow::RenderWindow(int width,
                            int height,
+                           unsigned guestWidth,
+                           unsigned guestHeight,
                            bool use_thread,
-                           bool use_sub_window,
-                           bool egl2egl)
+                           bool use_sub_window)
     : mRepostThread([this] {
           while (auto cmd = mRepostCommands.receive()) {
               if (*cmd == RepostCommand::Sync) {
@@ -393,8 +378,9 @@ RenderWindow::RenderWindow(int width,
     msg.cmd = CMD_INITIALIZE;
     msg.init.width = width;
     msg.init.height = height;
+    msg.init.guestWidth = guestWidth;
+    msg.init.guestHeight = guestHeight;
     msg.init.useSubWindow = use_sub_window;
-    msg.init.egl2egl = egl2egl;
     mValid = processMessage(msg);
 }
 
@@ -477,30 +463,22 @@ emugl::Renderer::FlushReadPixelPipeline
 RenderWindow::getFlushReadPixelPipeline() {
     return FrameBuffer::getFB()->getFlushReadPixelPipeline();
 }
-bool RenderWindow::setupSubWindow(FBNativeWindowType window,
-                                  int wx,
-                                  int wy,
-                                  int ww,
-                                  int wh,
-                                  int fbw,
-                                  int fbh,
-                                  float dpr,
-                                  float zRot,
-                                  bool deleteExisting) {
+bool RenderWindow::setupSubWindow(EGLNativeWindowType window,
+                                  int x,
+                                  int y,
+                                  int width,
+                                  int height,
+                                  float zRot) {
     D("Entering mHasSubWindow=%s\n", mHasSubWindow ? "true" : "false");
 
     RenderWindowMessage msg = {};
     msg.cmd = CMD_SETUP_SUBWINDOW;
     msg.subwindow.parent = window;
-    msg.subwindow.wx = wx;
-    msg.subwindow.wy = wy;
-    msg.subwindow.ww = ww;
-    msg.subwindow.wh = wh;
-    msg.subwindow.fbw = fbw;
-    msg.subwindow.fbh = fbh;
-    msg.subwindow.dpr = dpr;
+    msg.subwindow.x = x;
+    msg.subwindow.y = y;
+    msg.subwindow.w = width;
+    msg.subwindow.h = height;
     msg.subwindow.rotation = zRot;
-    msg.subwindow.deleteExisting = deleteExisting;
 
     mHasSubWindow = processMessage(msg);
 

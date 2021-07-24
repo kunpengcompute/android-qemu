@@ -40,7 +40,7 @@ public:
 
 static ::emugl::LazyInstance<ThreadInfoStore> s_tls = LAZY_INSTANCE_INIT;
 
-RenderThreadInfo::RenderThreadInfo() {
+RenderThreadInfo::RenderThreadInfo(uint32_t pid, uint32_t tid) : m_pid(pid), m_tid(tid), m_puid(pid) {
     s_tls->set(this);
 }
 

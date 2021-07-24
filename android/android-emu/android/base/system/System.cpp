@@ -826,7 +826,7 @@ public:
             res.total_page_file = mem.ullTotalPageFile;
         }
 #elif defined (__linux__)
-        size_t size = 0;
+        unsigned long size = 0;
         std::ifstream fin;
 
         fin.open("/proc/self/status");
@@ -2404,7 +2404,7 @@ System::FileSize System::getFilePageSizeForPath(StringView path) {
         pageSize = (System::FileSize)getpagesize();
     } else {
         if (fsStatus.f_type == HUGETLBFS_MAGIC) {
-            fprintf(stderr, "hugepage detected. size: %lu\n",
+            fprintf(stderr, "hugepage detected. size: %u\n",
                     fsStatus.f_bsize);
             /* It's hugepage, return the huge page size */
             pageSize = (System::FileSize)fsStatus.f_bsize;

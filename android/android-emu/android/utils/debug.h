@@ -78,23 +78,11 @@ typedef enum {
 } VerboseTag;
 #undef  _VERBOSE_TAG
 
-extern uint64_t android_verbose;
 
 // Enable/disable verbose logs from the base/* family.
 extern void base_enable_verbose_logs();
 extern void base_disable_verbose_logs();
 
-#define  VERBOSE_ENABLE(tag)    \
-    android_verbose |= (1ULL << VERBOSE_##tag)
-
-#define  VERBOSE_DISABLE(tag)   \
-    android_verbose &= (1ULL << VERBOSE_##tag)
-
-#define  VERBOSE_CHECK(tag)    \
-    ((android_verbose & (1ULL << VERBOSE_##tag)) != 0)
-
-#define  VERBOSE_CHECK_ANY()    \
-    (android_verbose != 0)
 
 #define  VERBOSE_PRINT(tag,...)  \
     do { if (VERBOSE_CHECK(tag)) dprint(__VA_ARGS__); } while (0)
