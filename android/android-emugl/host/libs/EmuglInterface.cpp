@@ -549,17 +549,16 @@ enum WindowControlRetCode : uint32_t {
     WINDOW_CONTROL_ALREADY_INITED = 0x0A050002,
 };
 
-int Initialize(int width, int height, unsigned guestWidth, unsigned guestHeight, bool useThread,
+int Initialize(unsigned int width, unsigned int height, bool useThread,
                            bool useSubWindow)
 {
     if (g_renderWindow != nullptr) {
         ERR("render window already initialize");
         return WINDOW_CONTROL_ALREADY_INITED;
     }
-    INFO("width:%d, height:%d, guestWidth:%d, guestHeight:%d", width, height,
-        guestWidth, guestHeight);
+    INFO("width:%u, height:%u", width, height);
     g_renderWindow = std::unique_ptr<RenderWindow>(new (std::nothrow) RenderWindow(width, height,
-        guestWidth, guestHeight, useThread, useSubWindow));
+        useThread, useSubWindow));
     if (g_renderWindow == nullptr) {
         ERR("error: initialize render window failed");
         return WINDOW_CONTROL_INIT_FAILED;

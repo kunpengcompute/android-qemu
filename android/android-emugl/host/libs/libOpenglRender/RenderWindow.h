@@ -60,7 +60,7 @@ public:
     //
     // Note that this call doesn't display anything, it just initializes
     // the library, use setupSubWindow() to display something.
-    RenderWindow(int width, int height, unsigned guestWidth, unsigned guestHeight, bool use_thread, bool use_sub_window);
+    RenderWindow(unsigned int width, unsigned int height, bool use_thread, bool use_sub_window);
 
     // Destructor. This will automatically call removeSubWindow() is needed.
     ~RenderWindow();

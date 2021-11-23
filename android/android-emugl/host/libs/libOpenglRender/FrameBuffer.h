@@ -71,7 +71,7 @@ typedef std::unordered_map<HandleType, ColorBufferRef> ColorBufferMap;
 typedef std::unordered_map<HandleType, int> ColorBufferRefMap;
 typedef std::unordered_map<uint64_t, ColorBufferRefMap> ProcOwnedColorBuffers;
 
-typedef std::unordered_set<HandleType> EGLImageSet;
+typedef std::unordered_set<EGLImageKHR> EGLImageSet;
 typedef std::unordered_map<uint64_t, EGLImageSet> ProcOwnedEGLImages;
 
 typedef std::unordered_map<void*, std::function<void()>> CallbackMap;
@@ -108,7 +108,7 @@ public:
     // own sub-windows. If false, this means the caller will use
     // setPostCallback() instead to retrieve the content.
     // Returns true on success, false otherwise.
-    static bool initialize(int width, int height, unsigned int guest_width, unsigned int guest_height, bool useSubWindow,
+    static bool initialize(unsigned int width, unsigned int height, bool useSubWindow,
             bool egl2egl);
 
     // Setup a sub-window to display the content of the emulated GPU
@@ -450,11 +450,11 @@ public:
 	std::shared_ptr<YuvDraw<GLESv2Dispatch *>> getYuvDraw() const { return m_yuvDraw; }
     // Create an eglImage and return its handle.  Reference:
     // https://www.khronos.org/registry/egl/extensions/KHR/EGL_KHR_image_base.txt
-    HandleType createClientImage(HandleType context, EGLenum target, GLuint buffer);
+    void* createClientImage(HandleType context, EGLenum target, GLuint buffer);
     // Call the implementation of eglDestroyImageKHR, return if succeeds or
     // not. Reference:
     // https://www.khronos.org/registry/egl/extensions/KHR/EGL_KHR_image_base.txt
-    EGLBoolean destroyClientImage(HandleType image);
+    EGLBoolean destroyClientImage(void* image);
 
     // Used internally.
     bool bind_locked();
@@ -592,7 +592,7 @@ public:
         s_deleteColorbufferCallBack = deleteColorbufferFunc;
     }
 private:
-    FrameBuffer(int p_width, int p_height, unsigned int guestWidth, unsigned int guestHeight, bool useSubWindow);
+    FrameBuffer(unsigned int p_width, unsigned int p_height, bool useSubWindow);
     HandleType genHandle_locked();
 
     bool bindSubwin_locked();

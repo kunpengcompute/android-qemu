@@ -77,8 +77,6 @@ struct RenderWindowMessage {
         struct {
             int width;
             int height;
-            unsigned guestWidth;
-            unsigned guestHeight;
             bool useSubWindow;
             bool egl2egl;
         } init;
@@ -127,8 +125,6 @@ struct RenderWindowMessage {
                        msg.init.width, msg.init.height);
                 result = FrameBuffer::initialize(msg.init.width,
                                                  msg.init.height,
-			                                     msg.init.guestWidth,
-			                                     msg.init.guestHeight,
                                                  msg.init.useSubWindow,
                                                  msg.init.egl2egl);
                 break;
@@ -348,10 +344,8 @@ private:
 
 }  // namespace
 
-RenderWindow::RenderWindow(int width,
-                           int height,
-                           unsigned guestWidth,
-                           unsigned guestHeight,
+RenderWindow::RenderWindow(unsigned int width,
+                           unsigned int height,
                            bool use_thread,
                            bool use_sub_window)
     : mRepostThread([this] {
@@ -378,8 +372,6 @@ RenderWindow::RenderWindow(int width,
     msg.cmd = CMD_INITIALIZE;
     msg.init.width = width;
     msg.init.height = height;
-    msg.init.guestWidth = guestWidth;
-    msg.init.guestHeight = guestHeight;
     msg.init.useSubWindow = use_sub_window;
     mValid = processMessage(msg);
 }
