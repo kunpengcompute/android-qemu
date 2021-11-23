@@ -34,6 +34,9 @@ WindowSurface::WindowSurface(EGLDisplay display,
         mHndl(hndl) {}
 
 WindowSurface::~WindowSurface() {
+    mAttachedColorBuffer = nullptr;
+    mReadContext = nullptr;
+    mDrawContext = nullptr;
     if (mSurface) {
         s_egl.eglDestroySurface(mDisplay, mSurface);
     }

@@ -140,7 +140,7 @@ struct RenderWindowMessage {
                 // yet created (e.g. if CMD_INITIALIZE failed),
                 // so make sure we check if it is there before finalizing
                 if (const auto fb = FrameBuffer::getFB()) {
-                    fb->finalize();
+                    delete fb;
                 }
                 result = true;
                 break;

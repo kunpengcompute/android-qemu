@@ -86,6 +86,7 @@ private:
 
 FrameBuffer* FrameBuffer::s_theFrameBuffer = NULL;
 HandleType FrameBuffer::s_nextHandle = 0;
+DeleteColorbufferFunc FrameBuffer::s_deleteColorbufferCallBack = NULL;
 float FrameBuffer::m_zRot = 0;
 static const GLint gles2ContextAttribsESOrGLCompat[] =
    { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
@@ -230,7 +231,13 @@ void FrameBuffer::finalize() {
     }
     m_windows.clear();
     m_contexts.clear();
-    m_yuvDraw = nullptr;
+    {
+        bind_locked();
+        m_yuvDraw = nullptr;
+        delete m_textureDraw;
+        m_textureDraw = nullptr;
+        unbind_locked();
+    }
     if (m_eglDisplay != EGL_NO_DISPLAY) {
         s_egl.eglMakeCurrent(m_eglDisplay, NULL, NULL, NULL);
         if (m_eglContext != EGL_NO_CONTEXT) {
@@ -676,7 +683,6 @@ FrameBuffer::~FrameBuffer() {
         m_postThread.enqueue({ PostCmd::Exit, });
     }
 
-    delete m_textureDraw;
     delete m_configs;
     delete m_colorBufferHelper;
 
@@ -1294,7 +1300,9 @@ void FrameBuffer::performDelayedColorBufferCloseLocked(bool forced) {
     // timestamp change (end of previous second -> beginning of a next one),
     // but not for long - this is a workaround for race conditions, and they
     // are quick.
-    static constexpr int kColorBufferClosingDelaySec = 1;
+    // getUnixTime精度是秒，之前延时的时间为1s，可能实际延时时间不足1s就被真正关闭，现修改成3s，延时时间绝对超过2s
+    // video play就出现T+979ms的加入了延时删除队列，在T1+001ms的时候就被删除，之后T1+005ms的时候才来opencolorbuffer，最终导致闪屏
+    static constexpr int kColorBufferClosingDelaySec = 3;
 
     const auto now = System::get()->getUnixTime();
     auto it = m_colorBufferDelayedCloseList.begin();
@@ -1305,6 +1313,11 @@ void FrameBuffer::performDelayedColorBufferCloseLocked(bool forced) {
             const auto& cb = m_colorbuffers.find(it->cbHandle);
             if (cb != m_colorbuffers.end()) {
                 m_colorbuffers.erase(cb);
+                if (s_deleteColorbufferCallBack != NULL) {
+                    s_deleteColorbufferCallBack(it->cbHandle);
+                } else {
+                    ERR("Not set delete colorbuffer callback");
+                }
             }
         }
         ++it;
