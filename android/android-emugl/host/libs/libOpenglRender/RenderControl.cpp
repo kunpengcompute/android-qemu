@@ -734,8 +734,10 @@ int rcFlushWindowColorBuffer(uint32_t windowSurface)
 // the guest will not wait until this function returns,
 // nor will it immediately send the command,
 // resulting in more asynchronous behavior.
-void rcFlushWindowColorBufferAsync(uint32_t windowSurface)
+void rcFlushWindowColorBufferAsync(uint32_t windowSurface, EGLint *rects, EGLint rectsNum)
 {
+    (void) rects;
+    (void) rectsNum;
     rcFlushWindowColorBuffer(windowSurface);
 }
 
@@ -875,7 +877,7 @@ int rcUpdateColorBufferDMA(uint32_t colorBuffer,
     return 0;
 }
 
-uint32_t rcCreateClientImage(uint32_t context, EGLenum target, GLuint buffer)
+void* rcCreateClientImage(uint32_t context, EGLenum target, GLuint buffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -886,7 +888,7 @@ uint32_t rcCreateClientImage(uint32_t context, EGLenum target, GLuint buffer)
     return fb->createClientImage(context, target, buffer);
 }
 
-int rcDestroyClientImage(uint32_t image)
+int rcDestroyClientImage(void* image)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();

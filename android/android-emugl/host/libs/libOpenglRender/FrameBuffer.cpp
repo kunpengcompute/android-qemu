@@ -279,7 +279,7 @@ bool InitLibrary()
     INFO("Init gles2 dispatch");
     return true;
 }
-bool FrameBuffer::initialize(int width, int height, unsigned int guest_width, unsigned int guest_height, bool useSubWindow,
+bool FrameBuffer::initialize(unsigned int width, unsigned int height, bool useSubWindow,
         bool egl2egl) {
     GL_LOG("FrameBuffer::initialize");
     if (s_theFrameBuffer != NULL) {
@@ -292,7 +292,7 @@ bool FrameBuffer::initialize(int width, int height, unsigned int guest_width, un
     // allocate space for the FrameBuffer object
     //
     std::unique_ptr<FrameBuffer> fb(
-            new FrameBuffer(width, height, guest_width, guest_height, useSubWindow));
+            new FrameBuffer(width, height, useSubWindow));
     if (!fb) {
         GL_LOG("Failed to create fb");
         ERR("Failed to create fb\n");
@@ -649,13 +649,13 @@ GLESDispatchMaxVersion FrameBuffer::getMaxGLESVersion() {
     return sMaxGLESVersion;
 }
 
-FrameBuffer::FrameBuffer(int p_width, int p_height, unsigned int guestWidth, unsigned int guestHeight, bool useSubWindow)
+FrameBuffer::FrameBuffer(unsigned int p_width, unsigned int p_height, bool useSubWindow)
     : m_framebufferWidth(p_width),
       m_framebufferHeight(p_height),
       m_windowWidth(p_width),
       m_windowHeight(p_height),
-	  m_guestWidth(guestWidth),
-      m_guestHeight(guestHeight),
+	  m_guestWidth(p_width),
+      m_guestHeight(p_height),
       m_useSubWindow(useSubWindow),
       m_fpsStats(getenv("SHOW_FPS_STATS") != nullptr),
       m_perfStats(false),
@@ -1428,8 +1428,7 @@ std::vector<HandleType> FrameBuffer::cleanupProcGLObjects_locked(uint64_t puid, 
                 if (!procIte->second.empty()) {
                     for (auto eglImg : procIte->second) {
                         s_egl.eglDestroyImageKHR(
-                                m_eglDisplay,
-                                reinterpret_cast<EGLImageKHR>((HandleType)eglImg));
+                                m_eglDisplay, eglImg);
                     }
                 }
                 m_procOwnedEGLImages.erase(procIte);
@@ -1873,7 +1872,7 @@ WindowSurfacePtr FrameBuffer::getWindowSurface_locked(HandleType p_windowsurface
     return android::base::findOrDefault(m_windows, p_windowsurface).first;
 }
 
-HandleType FrameBuffer::createClientImage(HandleType context,
+void* FrameBuffer::createClientImage(HandleType context,
                                           EGLenum target,
                                           GLuint buffer) {
     EGLContext eglContext = EGL_NO_CONTEXT;
@@ -1882,7 +1881,7 @@ HandleType FrameBuffer::createClientImage(HandleType context,
         RenderContextMap::const_iterator rcIt = m_contexts.find(context);
         if (rcIt == m_contexts.end()) {
             // bad context handle
-            return false;
+            return NULL;
         }
         eglContext =
                 rcIt->second ? rcIt->second->getEGLContext() : EGL_NO_CONTEXT;
@@ -1891,21 +1890,20 @@ HandleType FrameBuffer::createClientImage(HandleType context,
     EGLImageKHR image = s_egl.eglCreateImageKHR(
             m_eglDisplay, eglContext, target,
             reinterpret_cast<EGLClientBuffer>(buffer), NULL);
-    HandleType imgHnd = (HandleType) reinterpret_cast<uintptr_t>(image);
 
     RenderThreadInfo* tInfo = RenderThreadInfo::get();
     uint64_t puid = tInfo->m_puid;
     if (puid) {
         AutoLock mutex(m_lock);
-        m_procOwnedEGLImages[puid].insert(imgHnd);
+        m_procOwnedEGLImages[puid].insert(image);
     }
-    return imgHnd;
+    return image;
 }
 
-EGLBoolean FrameBuffer::destroyClientImage(HandleType image) {
+EGLBoolean FrameBuffer::destroyClientImage(void* image) {
     // eglDestroyImageKHR has its own lock  already.
     EGLBoolean ret = s_egl.eglDestroyImageKHR(
-            m_eglDisplay, reinterpret_cast<EGLImageKHR>(image));
+            m_eglDisplay, image);
     if (!ret)
         return false;
     RenderThreadInfo* tInfo = RenderThreadInfo::get();
@@ -2373,6 +2371,7 @@ bool FrameBuffer::compose(uint32_t bufferSize, void* buffer) {
 
 void FrameBuffer::onSave(Stream* stream,
                          const android::snapshot::ITextureSaverPtr& textureSaver) {
+#ifndef __ANDROID__ 
     // Things we do not need to snapshot:
     //     m_eglSurface
     //     m_eglContext
@@ -2455,11 +2454,12 @@ void FrameBuffer::onSave(Stream* stream,
             s_egl.eglPostSaveContext(m_eglDisplay, m_pbufContext, stream);
         }
     }
-
+#endif
 }
 
 bool FrameBuffer::onLoad(Stream* stream,
                          const android::snapshot::ITextureLoaderPtr& textureLoader) {
+#ifndef __ANDROID__ 
     AutoLock lock(m_lock);
     // cleanups
     {
@@ -2609,7 +2609,7 @@ bool FrameBuffer::onLoad(Stream* stream,
             }
         }
     }
-
+#endif
     return true;
     // TODO: restore memory management
 }
