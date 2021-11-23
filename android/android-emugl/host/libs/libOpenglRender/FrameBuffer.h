@@ -43,6 +43,8 @@
 
 #include <stdint.h>
 
+using DeleteColorbufferFunc = void (*)(uint32_t);
+
 struct ColorBufferRef {
     ColorBufferPtr cb;
     uint32_t refcount;  // number of client-side references
@@ -586,6 +588,9 @@ public:
             m_zRot = 90;
         }
     }
+    static void setDeleteColorbufferCallBack(DeleteColorbufferFunc deleteColorbufferFunc) {
+        s_deleteColorbufferCallBack = deleteColorbufferFunc;
+    }
 private:
     FrameBuffer(int p_width, int p_height, unsigned int guestWidth, unsigned int guestHeight, bool useSubWindow);
     HandleType genHandle_locked();
@@ -806,5 +811,6 @@ private:
     android::base::MessageChannel<HandleType, 1024>
         mOutstandingColorBufferDestroys;
     int rotation = 0;
+    static DeleteColorbufferFunc s_deleteColorbufferCallBack;
 };
 #endif

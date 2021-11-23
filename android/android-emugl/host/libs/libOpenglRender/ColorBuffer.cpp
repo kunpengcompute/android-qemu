@@ -221,16 +221,24 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
 
     const unsigned long bufsize = ((unsigned long)bytesPerPixel) * p_width
             * p_height;
-    android::base::ScopedCPtr<char> initialImage(
+    // 用于初始化texture的内存改成使用static保存，将常驻，需要更多空间时，才进行重新申请，并释放之前的
+    // 减少频繁的内存申请及释放
+    static unsigned long maxBufferSize = 0;
+    static android::base::ScopedCPtr<char> initialImage = nullptr;
+    if (bufsize > maxBufferSize) {
+        android::base::ScopedCPtr<char> initData(
                 static_cast<char*>(::malloc(bufsize)));
-    if (!initialImage) {
-        fprintf(stderr,
-                "error: failed to allocate initial memory for ColorBuffer "
-                "of size %dx%dx%d (%lu KB)\n",
-                p_width, p_height, bytesPerPixel * 8, bufsize / 1024);
-        return nullptr;
+        if (!initData) {
+            fprintf(stderr,
+                    "error: failed to allocate initial memory for ColorBuffer "
+                    "of size %dx%dx%d (%lu KB)\n",
+                    p_width, p_height, bytesPerPixel * 8, bufsize / 1024);
+            return nullptr;
+        }
+        memset(initData.get(), 0x0, bufsize);
+        initialImage = std::move(initData);
+        maxBufferSize = bufsize;
     }
-    memset(initialImage.get(), 0x0, bufsize);
 
     RecursiveScopedHelperContext context(helper);
     if (!context.isOk()) {
@@ -249,7 +257,6 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
     s_gles2.glTexImage2D(GL_TEXTURE_2D, 0, p_internalFormat, p_width, p_height,
                          0, texFormat, pixelType,
                          initialImage.get());
-    initialImage.reset();
 
     s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -750,13 +757,15 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                 s_gles2.glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
             }
         }
-        EGLSyncKHR m_fence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
+        EGLSyncKHR fence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
         RecursiveScopedHelperContext context(m_helper);
         if (!context.isOk()) {
+            s_egl.eglDestroySyncKHR(m_display, fence);
             return false;
         }
 
         if (!bindFbo(&m_fbo, m_tex)) {
+            s_egl.eglDestroySyncKHR(m_display, fence);
             return false;
         }
 
@@ -766,9 +775,9 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
         };
         s_gles2.glGetIntegerv(GL_VIEWPORT, vport);
         s_gles2.glViewport(0, 0, m_width, m_height);
-        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, m_fence,
+        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, fence,
                                                 EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
-        s_egl.eglDestroySyncKHR(m_display, m_fence);
+        s_egl.eglDestroySyncKHR(m_display, fence);
         // render m_blitTex
         m_helper->getTextureDraw()->draw(m_blitTex, 0., 0, 0);
 

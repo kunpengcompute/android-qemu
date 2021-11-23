@@ -23,17 +23,10 @@ extern "C" {
 #endif
 
 std::map<uint32_t, int> pidThreads;
-std::set<uint32_t> deletePids;
 std::mutex dataMutex;
 
 void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
 {
-    {
-        std::lock_guard<std::mutex> lockGuard(dataMutex);
-        if (deletePids.find(pid) != deletePids.end()) {
-            ERR("cur process is be deleted, pid:%u, tid:%u", pid, tid);
-        }
-    }
     RenderThreadInfo *threadInfo = nullptr;
     threadInfo = new (std::nothrow) RenderThreadInfo(pid, tid);
     if (threadInfo == nullptr) {
@@ -51,6 +44,8 @@ void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
 
 void DestoryGLESv2Decoder(void* self)
 {
+    // 将当前线程持有的context与此线程解绑，保证客户端退出时删除此context时可正常释放资源
+    FrameBuffer::getFB()->bindContext(0, 0, 0);
     RenderThreadInfo* curThread = RenderThreadInfo::get();
     if (curThread != nullptr) {
         INFO("pid:%u tid:%u is deconstruction", curThread->m_pid, curThread->m_tid);
@@ -69,7 +64,6 @@ void rcExitRenderThread()
         std::lock_guard<std::mutex> lockGuard(dataMutex);
         pidThreads[curThread->m_pid]--;
         if (pidThreads[curThread->m_pid] == 0) {
-            deletePids.insert(curThread->m_pid);
             needCleanPid = curThread->m_pid;
         } else if (pidThreads[curThread->m_pid] < 0) {
             ERR("cur process is be delete to negative, pid:%u, tid:%u", curThread->m_pid, curThread->m_tid);
@@ -79,8 +73,17 @@ void rcExitRenderThread()
     }
     if (needCleanPid != 0) {
         INFO("begin clean pid:%u resource", needCleanPid);
+        {
+            std::lock_guard<std::mutex> lockGuard(dataMutex);
+            pidThreads.erase(needCleanPid);
+        }
         FrameBuffer::getFB()->cleanupProcGLObjects(needCleanPid);
     }
+}
+
+void SetDeleteColorbufferCallBack(DeleteColorbufferFunc deleteColorbufferFunc)
+{
+    FrameBuffer::setDeleteColorbufferCallBack(deleteColorbufferFunc);
 }
 
 #define GET_ADDRESS(func) \
