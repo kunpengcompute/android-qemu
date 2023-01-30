@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2017-2021. All rights reserved.
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the Apache License version 2
  *
@@ -17,14 +18,34 @@
 #include <set>
 #include <mutex>
 
+#ifdef REMOTE_RENDER
+std::function<void(int width, int height)> EncoderGLInterface::initEncoder = nullptr;
+std::function<void()> EncoderGLInterface::encodeTex = nullptr;
+std::function<void(uint32_t *texture, uint32_t *target)> EncoderGLInterface::getEncodeTex = nullptr;
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-std::map<uint32_t, int> pidThreads;
-std::mutex dataMutex;
+#ifdef REMOTE_RENDER
+void SetInitEncoder(std::function<void(int width, int height)> func)
+{
+    EncoderGLInterface::initEncoder = func;
+}
 
-void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
+void SetEncodeTex(std::function<void()> func)
+{
+    EncoderGLInterface::encodeTex = func;
+}
+
+void SetGetEncodeTex(std::function<void(uint32_t *texture, uint32_t *target)> func)
+{
+    EncoderGLInterface::getEncodeTex = func;
+}
+#endif
+
+void *CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
 {
     RenderThreadInfo *threadInfo = nullptr;
     threadInfo = new (std::nothrow) RenderThreadInfo(pid, tid);
@@ -33,19 +54,17 @@ void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
         return nullptr;
     }
     threadInfo->m_gl2Dec.initGL(gles2_dispatch_get_proc_func, nullptr);
-    {
-        std::lock_guard<std::mutex> lockGuard(dataMutex);
-        pidThreads[pid]++;
-    }
+    FrameBuffer::getFB()->addThread(pid);
     INFO("pid:%u tid:%u is construction", threadInfo->m_pid, threadInfo->m_tid);
     return &threadInfo->m_gl2Dec;
 }
 
-void DestoryGLESv2Decoder(void* self)
+void DestoryGLESv2Decoder(void *self)
 {
+    FrameBuffer::getFB()->resetTextureBindImages();
     // 将当前线程持有的context与此线程解绑，保证客户端退出时删除此context时可正常释放资源
     FrameBuffer::getFB()->bindContext(0, 0, 0);
-    RenderThreadInfo* curThread = RenderThreadInfo::get();
+    RenderThreadInfo *curThread = RenderThreadInfo::get();
     if (curThread != nullptr) {
         INFO("pid:%u tid:%u is deconstruction", curThread->m_pid, curThread->m_tid);
         delete curThread;
@@ -57,25 +76,14 @@ void rcExitRenderThread()
     FrameBuffer::getFB()->bindContext(0, 0, 0);
     FrameBuffer::getFB()->drainWindowSurface();
     FrameBuffer::getFB()->drainRenderContext();
-    RenderThreadInfo* curThread = RenderThreadInfo::get();
+    RenderThreadInfo *curThread = RenderThreadInfo::get();
     int needCleanPid = 0;
-    {
-        std::lock_guard<std::mutex> lockGuard(dataMutex);
-        pidThreads[curThread->m_pid]--;
-        if (pidThreads[curThread->m_pid] == 0) {
-            needCleanPid = curThread->m_pid;
-        } else if (pidThreads[curThread->m_pid] < 0) {
-            ERR("cur process is be delete to negative, pid:%u, tid:%u", curThread->m_pid, curThread->m_tid);
-        } else {
-            INFO("pid:%u tid:%u is exist", curThread->m_pid, curThread->m_tid);
-        }
+    if (FrameBuffer::getFB()->deleteThread(curThread->m_pid)) {
+        needCleanPid = curThread->m_pid;
     }
+    INFO("pid:%u tid:%u is exist", curThread->m_pid, curThread->m_tid);
     if (needCleanPid != 0) {
         INFO("begin clean pid:%u resource", needCleanPid);
-        {
-            std::lock_guard<std::mutex> lockGuard(dataMutex);
-            pidThreads.erase(needCleanPid);
-        }
         FrameBuffer::getFB()->cleanupProcGLObjects(needCleanPid);
     }
 }
@@ -85,14 +93,18 @@ void SetDeleteColorbufferCallBack(DeleteColorbufferFunc deleteColorbufferFunc)
     FrameBuffer::setDeleteColorbufferCallBack(deleteColorbufferFunc);
 }
 
-#define GET_ADDRESS(func) \
-void* GetAddress_##func(void* self) \
-{ \
-    GLESv2Decoder* ctx = (GLESv2Decoder*) self; \
-    if (ctx == nullptr) { \
-        return nullptr; \
-    } \
-    return (void *)(ctx->func); \
+using WriteEncDataFunc = bool (*)(const uint8_t *, uint32_t);
+void SetWriteEncDataCallBack(WriteEncDataFunc /*writeEncDataFunc*/)
+{}
+
+#define GET_ADDRESS(func)                           \
+void *GetAddress_##func(void *self)                 \
+{                                                   \
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;     \
+    if (ctx == nullptr) {                           \
+        return nullptr;                             \
+    }                                               \
+    return (void *)(ctx->func);                     \
 }
 
 GET_ADDRESS(glActiveTexture);
@@ -539,6 +551,20 @@ GET_ADDRESS(glSamplerParameterIivEXT);
 GET_ADDRESS(glSamplerParameterIuivEXT);
 GET_ADDRESS(glGetSamplerParameterIivEXT);
 GET_ADDRESS(glGetSamplerParameterIuivEXT);
+GET_ADDRESS(glMinSampleShading);
+GET_ADDRESS(glFramebufferTexture);
+GET_ADDRESS(glPatchParameteri);
+GET_ADDRESS(glTexBuffer);
+GET_ADDRESS(glTexBufferRange);
+GET_ADDRESS(glPrimitiveBoundingBox);
+GET_ADDRESS(glTexStorage3DMultisample);
+GET_ADDRESS(glDrawElementsBaseVertexOffset);
+GET_ADDRESS(glDrawElementsBaseVertexData);
+GET_ADDRESS(glDrawElementsInstancedBaseVertexDataAEMU);
+GET_ADDRESS(glDrawElementsInstancedBaseVertexOffsetAEMU);
+GET_ADDRESS(glGetnUniformfv);
+GET_ADDRESS(glGetnUniformiv);
+GET_ADDRESS(glGetnUniformuiv);
 
 std::unique_ptr<RenderWindow> g_renderWindow = nullptr;
 
@@ -548,16 +574,15 @@ enum WindowControlRetCode : uint32_t {
     WINDOW_CONTROL_ALREADY_INITED = 0x0A050002,
 };
 
-int Initialize(unsigned int width, unsigned int height, bool useThread,
-                           bool useSubWindow)
+int Initialize(unsigned int width, unsigned int height, bool useThread, bool useSubWindow)
 {
     if (g_renderWindow != nullptr) {
         ERR("render window already initialize");
         return WINDOW_CONTROL_ALREADY_INITED;
     }
     INFO("width:%u, height:%u", width, height);
-    g_renderWindow = std::unique_ptr<RenderWindow>(new (std::nothrow) RenderWindow(width, height,
-        useThread, useSubWindow));
+    g_renderWindow =
+        std::unique_ptr<RenderWindow>(new (std::nothrow) RenderWindow(width, height, useThread, useSubWindow));
     if (g_renderWindow == nullptr) {
         ERR("error: initialize render window failed");
         return WINDOW_CONTROL_INIT_FAILED;
@@ -596,7 +621,21 @@ void Finalize()
 void SetRotation(int rotation)
 {
     FrameBuffer *fb = FrameBuffer::getFB();
+    if (fb == nullptr) {
+        ERR("Failed to set rotaion, get framebuffer failed");
+        return;
+    }
     fb->setRotation(rotation);
+}
+
+void SetExitFlag()
+{
+    FrameBuffer *fb = FrameBuffer::getFB();
+    if (fb == nullptr) {
+        ERR("Failed to set rotaion, get framebuffer failed");
+        return;
+    }
+    fb->setExitFlag();
 }
 
 #ifdef __cplusplus

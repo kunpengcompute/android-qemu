@@ -23,6 +23,7 @@
 
 #include "emugl/common/misc.h"
 #include "emugl/common/shared_library.h"
+#include "emugl/common/logging.h"
 
 using android::base::AutoLock;
 using android::base::LazyInstance;
@@ -155,6 +156,7 @@ public:
         bool sandbox = System::get()->envGet("ANDROID_EMU_SANDBOX") == "1";
 
         if (!mVulkanLoader) {
+            /*
             if (sandbox) {
                 mVulkanLoader = emugl::SharedLibrary::open(VULKAN_LOADER_FILENAME);
             } else {
@@ -166,6 +168,13 @@ public:
                     mVulkanLoader = emugl::SharedLibrary::open(loaderPath.c_str());
                 }
             }
+            */
+                mVulkanLoader = emugl::SharedLibrary::open(VULKAN_LOADER_FILENAME);
+            if (mVulkanLoader) {
+                INFO("Success to load %s", VULKAN_LOADER_FILENAME);
+            } else {
+                ERR("Fail to load %s", VULKAN_LOADER_FILENAME);
+            }
         }
 #ifdef __linux__
         // On Linux, it might not be called libvulkan.so.
@@ -175,10 +184,9 @@ public:
                 mVulkanLoader =
                     emugl::SharedLibrary::open("libvulkan.so.1");
             } else {
-                auto altPath = pj(System::get()->getLauncherDirectory(),
-                    "lib64", "vulkan", "libvulkan.so.1");
+                // 在 linux 平台从如下路径加载 vulkan.so，需保证 vulkan 驱动正确安装
                 mVulkanLoader =
-                    emugl::SharedLibrary::open(altPath.c_str());
+                    emugl::SharedLibrary::open("/usr/lib64/libvulkan.so");
             }
         }
 #endif
@@ -206,8 +214,38 @@ static void* sVulkanDispatchDlOpen()  {
     return sDispatchImpl->dlopen();
 }
 
+PFN_vkGetInstanceProcAddr g_vkGetInstanceProcAddr = nullptr;
+PFN_vkVoidFunction vkGetInstanceProcAddrDebug(VkInstance instance, const char* pName)
+{
+    PFN_vkVoidFunction func = g_vkGetInstanceProcAddr(instance, pName);
+    DBG("vulkan_system_loader:%s to get instance sym %s", func == nullptr ? "Failed" : "Success", pName);
+    return func;
+}
+
+PFN_vkGetDeviceProcAddr g_vkGetDeviceProcAddr = nullptr;
+PFN_vkVoidFunction vkGetDeviceProcAddrDebug(VkDevice device, const char* pName)
+{
+    PFN_vkVoidFunction func = g_vkGetDeviceProcAddr(device, pName);
+    DBG("vulkan_system_loader:%s to get device sym %s", func == nullptr ? "Failed" : "Success", pName);
+    return func;
+
+}
+
 static void* sVulkanDispatchDlSym(void* lib, const char* sym) {
-    return sDispatchImpl->dlsym(lib, sym);
+    void* func = sDispatchImpl->dlsym(lib, sym);
+    DBG("vulkan_system_loader:%s to get global sym %s", func == nullptr ? "Failed" : "Success", sym);
+
+    if (strcmp(sym, "vkGetInstanceProcAddr") == 0) {
+        g_vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)func;
+        return (void*)vkGetInstanceProcAddrDebug;
+    }
+
+    if (strcmp(sym, "vkGetDeviceProcAddr") == 0) {
+        g_vkGetDeviceProcAddr = (PFN_vkGetDeviceProcAddr)func;
+        return (void*)vkGetDeviceProcAddrDebug;
+    }
+
+    return func;
 }
 
 void VulkanDispatchImpl::initialize(bool forTesting) {

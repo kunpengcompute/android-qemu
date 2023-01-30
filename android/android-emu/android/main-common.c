@@ -2161,12 +2161,12 @@ bool configAndStartRenderer(
         if (shouldEnableGLDirectMem) {
             crashhandler_append_message_format("Enabling GLDirectMem");
             // Do not enable if we did not enable it on the API 29 image itself.
-            feature_set_if_not_overridden_or_guest_disabled(kFeature_GLDirectMem, true);
+            feature_set_if_not_overridden_or_guest_disabled(kFeature_GLDirectMem, false);
         }
 
         if (shouldEnableVulkan) {
             crashhandler_append_message_format("Enabling Vulkan");
-            feature_set_if_not_overridden(kFeature_GLDirectMem, true);
+            feature_set_if_not_overridden(kFeature_GLDirectMem, false);
             feature_set_if_not_overridden(kFeature_Vulkan, true);
         } else {
             crashhandler_append_message_format(

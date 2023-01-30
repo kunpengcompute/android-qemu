@@ -37,11 +37,27 @@ EGLDispatch s_egl;
 
 bool init_egl_dispatch() {
     if (s_egl.initialized) return true;
+#ifdef __ANDROID__
 #if defined(__LP64__)
     const char* libName = "/system/lib64/libEGL.so";
 #else
     const char* libName = "/system/lib/libEGL.so";
 #endif
+#else // __ANDROID__
+#ifdef __x86_64__
+#if defined(__LP64__)
+    const char* libName = "/usr/lib64/libEGL.so";
+#else
+    const char* libName = "/usr/lib/libEGL.so";
+#endif
+#else // __x86_64__
+#if defined(__LP64__)
+    const char* libName = "/usr/lib/aarch64-linux-gnu/libEGL.so";
+#else
+    const char* libName = "/usr/lib/aarch64-linux-gnu/libEGL.so";
+#endif
+#endif // __x86_64__
+#endif // __ANDROID__
     char error[256];
     emugl::SharedLibrary *lib = emugl::SharedLibrary::open(libName, error, sizeof(error));
     if (!lib) {

@@ -24,7 +24,7 @@
 
 #if DEBUG_RECONSTRUCTION
 
-#define DEBUG_RECON(fmt,...) fprintf(stderr, "%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
+#define DEBUG_RECON(fmt,...) ERR("%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
 
 #else
 
@@ -222,7 +222,7 @@ protected:
         return nullptr;
     }
     virtual void onSave(android::base::Stream* stream) { }
-    virtual unsigned char* onLoad(android::base::Stream* stream) { }
+    virtual unsigned char* onLoad(android::base::Stream* stream) { return nullptr; }
 };
 
 void VkReconstruction::load(android::base::Stream* stream) {
@@ -292,37 +292,37 @@ void VkReconstruction::setApiTrace(VkReconstruction::ApiInfo* apiInfo, uint32_t 
 }
 
 void VkReconstruction::dump() {
-    fprintf(stderr, "%s: api trace dump\n", __func__);
+    ERR( "%s: api trace dump\n", __func__);
 
     size_t traceBytesTotal = 0;
 
     mApiTrace.forEachLiveEntry_const([&traceBytesTotal](bool live, uint64_t handle, const ApiInfo& info) {
-         fprintf(stderr, "VkReconstruction::%s: api handle 0x%llx: %s\n", __func__, (unsigned long long)handle, goldfish_vk::api_opcode_to_string(info.opCode));
+         ERR( "VkReconstruction::%s: api handle 0x%llx: %s\n", __func__, (unsigned long long)handle, goldfish_vk::api_opcode_to_string(info.opCode));
          traceBytesTotal += info.traceBytes;
     });
 
     mHandleReconstructions.forEachLiveComponent_const([this](bool live, uint64_t componentHandle, uint64_t entityHandle, const HandleReconstruction& reconstruction) {
-        fprintf(stderr, "VkReconstruction::%s: %p handle 0x%llx api refs:\n", __func__, this, (unsigned long long)entityHandle);
+        ERR( "VkReconstruction::%s: %p handle 0x%llx api refs:\n", __func__, this, (unsigned long long)entityHandle);
         for (auto apiHandle : reconstruction.apiRefs) {
             auto apiInfo = mApiTrace.get(apiHandle);
             const char* apiName = apiInfo ? goldfish_vk::api_opcode_to_string(apiInfo->opCode) : "unalloced";
-            fprintf(stderr, "VkReconstruction::%s:     0x%llx: %s\n", __func__, (unsigned long long)apiHandle, apiName);
+            ERR( "VkReconstruction::%s:     0x%llx: %s\n", __func__, (unsigned long long)apiHandle, apiName);
             for (auto createdHandle : apiInfo->createdHandles) {
-                fprintf(stderr, "VkReconstruction::%s:         created 0x%llx\n", __func__, (unsigned long long)createdHandle);
+                ERR( "VkReconstruction::%s:         created 0x%llx\n", __func__, (unsigned long long)createdHandle);
             }
         }
     });
 
     mHandleModifications.forEachLiveComponent_const([this](bool live, uint64_t componentHandle, uint64_t entityHandle, const HandleModification& modification) {
-        fprintf(stderr, "VkReconstruction::%s: mod: %p handle 0x%llx api refs:\n", __func__, this, (unsigned long long)entityHandle);
+        ERR( "VkReconstruction::%s: mod: %p handle 0x%llx api refs:\n", __func__, this, (unsigned long long)entityHandle);
         for (auto apiHandle : modification.apiRefs) {
             auto apiInfo = mApiTrace.get(apiHandle);
             const char* apiName = apiInfo ? goldfish_vk::api_opcode_to_string(apiInfo->opCode) : "unalloced";
-            fprintf(stderr, "VkReconstruction::%s: mod:     0x%llx: %s\n", __func__, (unsigned long long)apiHandle, apiName);
+            ERR( "VkReconstruction::%s: mod:     0x%llx: %s\n", __func__, (unsigned long long)apiHandle, apiName);
         }
     });
 
-    fprintf(stderr, "%s: total trace bytes: %zu\n", __func__, traceBytesTotal);
+    ERR( "%s: total trace bytes: %zu\n", __func__, traceBytesTotal);
 }
 
 void VkReconstruction::addHandles(const uint64_t* toAdd, uint32_t count) {

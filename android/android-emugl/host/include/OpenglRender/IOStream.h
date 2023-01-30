@@ -110,3 +110,74 @@ protected:
     size_t m_bufsize;
     size_t m_free = 0;
 };
+
+using VmiWriteFullyFn = int (*)(uint32_t pid, uint32_t tid, const uint8_t *buf, size_t len);
+class VkIOStream : public IOStream {
+public:
+    VkIOStream(uint32_t pid, uint32_t tid, VmiWriteFullyFn vmiWriteFully)
+        : IOStream(8), m_pid(pid), m_tid(tid), m_vmiWriteFully(vmiWriteFully)
+    {}
+
+    ~VkIOStream() = default;
+
+    unsigned char* alloc(size_t ) {
+        ERR("Not support alloc()");
+        return nullptr;
+    }
+    void *allocBuffer(size_t ) override {
+        ERR("Not support allocBuffer()");
+        return nullptr;
+    }
+    int commitBuffer(size_t ) override {
+        ERR("Not support commitBuffer()");
+        return -1;
+    }
+
+    int writeFully(const void* buf, size_t len) override {
+        if (m_vmiWriteFully == nullptr) {
+            ERR("VmiWriteFully is nullptr");
+            return -1;
+        }
+
+        return m_vmiWriteFully(m_pid, m_tid, (const uint8_t *)buf, len);
+    }
+
+    int flush() {
+        ERR("Not support flush()");
+        return -1;
+    }
+
+    const unsigned char *readFully( void *, size_t ) override {
+        ERR("Not support readFully()");
+        return nullptr;
+    }
+
+    void* getDmaForReading(uint64_t ) override {
+        ERR("Not support getDmaForReading()");
+        return nullptr;
+    }
+
+    void unlockDma(uint64_t ) override {
+        ERR("Not support unlockDma()");
+    }
+
+    const unsigned char *readRaw(void *, size_t *) override {
+        ERR("Not support readRaw()");
+        return nullptr;
+    }
+
+    void onSave(android::base::Stream* ) override {
+        ERR("Not support onSave()");
+    }
+
+    unsigned char* onLoad(android::base::Stream* ) override {
+        ERR("Not support onLoad()");
+        return nullptr;
+    }
+
+private:
+    uint32_t m_pid = 0;
+    uint32_t m_tid = 0;
+    VmiWriteFullyFn m_vmiWriteFully = nullptr;
+};
+

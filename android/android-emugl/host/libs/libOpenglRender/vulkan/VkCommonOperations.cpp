@@ -233,8 +233,7 @@ static bool getImageFormatExternalMemorySupportInfo(
                 info->supported = false;
                 return true;
             } else {
-                fprintf(stderr,
-                        "%s: vkGetPhysicalDeviceImageFormatProperties query "
+                ERR("%s: vkGetPhysicalDeviceImageFormatProperties query "
                         "failed with %d "
                         "for format 0x%x type 0x%x usage 0x%x flags 0x%x\n",
                         __func__, res, info->format, info->type,
@@ -300,7 +299,7 @@ static bool getImageFormatExternalMemorySupportInfo(
             info->supported = false;
             return true;
         } else {
-            fprintf(stderr,
+            ERR(
                     "%s: vkGetPhysicalDeviceImageFormatProperties2KHR query "
                     "failed "
                     "for format 0x%x type 0x%x usage 0x%x flags 0x%x\n",
@@ -462,8 +461,8 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
     std::vector<VkExtensionProperties> exts(extCount);
     gvk->vkEnumerateInstanceExtensionProperties(nullptr, &extCount, exts.data());
 
-    bool externalMemoryCapabilitiesSupported =
-        extensionsSupported(exts, externalMemoryInstanceExtNames);
+    bool externalMemoryCapabilitiesSupported = true;
+        // extensionsSupported(exts, externalMemoryInstanceExtNames);
     bool moltenVKSupported =
         extensionsSupported(exts, moltenVKInstanceExtNames);
 
@@ -512,7 +511,7 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
         }
     }
 
-    LOG(VERBOSE) << "Creating instance, asking for version " << 
+    LOG(VERBOSE) << "Creating instance, asking for version " <<
         VK_VERSION_MAJOR(appInfo.apiVersion) << "." <<
         VK_VERSION_MINOR(appInfo.apiVersion) << "." <<
         VK_VERSION_PATCH(appInfo.apiVersion) << " ...";
@@ -523,6 +522,8 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
     if (res != VK_SUCCESS) {
         LOG(ERROR) << "Failed to create Vulkan instance.";
         return sVkEmulation;
+    } else {
+        LOG(INFO) << "Success to create Vulkan instance:" << sVkEmulation->instance;
     }
 
     // Create instance level dispatch.
@@ -533,7 +534,7 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
     auto ivk = sVkEmulation->ivk;
 
     if (!vulkan_dispatch_check_instance_VK_VERSION_1_0(ivk)) {
-        fprintf(stderr, "%s: Warning: Vulkan 1.0 APIs missing from instance\n", __func__);
+        ERR( "%s: Warning: Vulkan 1.0 APIs missing from instance\n", __func__);
     }
 
     if (ivk->vkEnumerateInstanceVersion) {
@@ -542,7 +543,7 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
         if ((VK_SUCCESS == enumInstanceRes) &&
             instanceVersion >= VK_MAKE_VERSION(1, 1, 0)) {
             if (!vulkan_dispatch_check_instance_VK_VERSION_1_1(ivk)) {
-                fprintf(stderr, "%s: Warning: Vulkan 1.1 APIs missing from instance (1st try)\n", __func__);
+                ERR( "%s: Warning: Vulkan 1.1 APIs missing from instance (1st try)\n", __func__);
             }
         }
 
@@ -566,7 +567,7 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
             LOG(VERBOSE) << "Created Vulkan 1.1 instance on second try.";
 
             if (!vulkan_dispatch_check_instance_VK_VERSION_1_1(ivk)) {
-                fprintf(stderr, "%s: Warning: Vulkan 1.1 APIs missing from instance (2nd try)\n", __func__);
+                ERR( "%s: Warning: Vulkan 1.1 APIs missing from instance (2nd try)\n", __func__);
             }
         }
     }
@@ -797,11 +798,11 @@ VkEmulation* createOrGetGlobalVkEmulation(VulkanDispatch* vk) {
 
     // Check if the dispatch table has everything 1.1 related
     if (!vulkan_dispatch_check_device_VK_VERSION_1_0(dvk)) {
-        fprintf(stderr, "%s: Warning: Vulkan 1.0 APIs missing from device.\n", __func__);
+        ERR( "%s: Warning: Vulkan 1.0 APIs missing from device.\n", __func__);
     }
     if (deviceVersion >= VK_MAKE_VERSION(1, 1, 0)) {
         if (!vulkan_dispatch_check_device_VK_VERSION_1_1(dvk)) {
-            fprintf(stderr, "%s: Warning: Vulkan 1.1 APIs missing from device\n", __func__);
+            ERR( "%s: Warning: Vulkan 1.1 APIs missing from device\n", __func__);
         }
     }
 
@@ -1364,7 +1365,7 @@ bool setupVkColorBuffer(uint32_t colorBufferHandle, bool vulkanOnly, bool* expor
         vk->vkBindImageMemory(sVkEmulation->device, res.image, res.memory.memory, 0);
 
     if (bindImageMemoryRes != VK_SUCCESS) {
-        fprintf(stderr, "%s: Failed to bind image memory. %d\n", __func__,
+        ERR( "%s: Failed to bind image memory. %d\n", __func__,
         bindImageMemoryRes);
         return bindImageMemoryRes;
     }
@@ -1373,14 +1374,14 @@ bool setupVkColorBuffer(uint32_t colorBufferHandle, bool vulkanOnly, bool* expor
         // Create IOSurface by passing null surface argument.
         VkResult useIOSurfaceRes = sVkEmulation->useIOSurfaceFunc(res.image, nullptr);
         if (useIOSurfaceRes != VK_SUCCESS) {
-            fprintf(stderr, "%s: Failed to create IOSurface. %d\n", __func__,
+            ERR( "%s: Failed to create IOSurface. %d\n", __func__,
                     useIOSurfaceRes);
             return false;
         }
         // Retrieve a reference to the IOSurface created above.
         sVkEmulation->getIOSurfaceFunc(res.image, &res.ioSurface);
         if (!res.ioSurface) {
-            fprintf(stderr, "%s: Failed to get IOSurface.\n", __func__);
+            ERR( "%s: Failed to get IOSurface.\n", __func__);
             return false;
         }
 #ifdef __APPLE__
@@ -1464,7 +1465,7 @@ bool updateColorBufferFromVkImage(uint32_t colorBufferHandle) {
     }
 
     if (!infoPtr->image) {
-        fprintf(stderr, "%s: error: ColorBuffer 0x%x has no VkImage\n", __func__, colorBufferHandle);
+        ERR( "%s: error: ColorBuffer 0x%x has no VkImage\n", __func__, colorBufferHandle);
         return false;
     }
 
@@ -1619,13 +1620,13 @@ bool updateVkImageFromColorBuffer(uint32_t colorBufferHandle) {
             colorBufferHandle, &cbNumBytes, nullptr);
 
     if (!readRes) {
-        fprintf(stderr, "%s: Failed to read color buffer 0x%x\n",
+        ERR( "%s: Failed to read color buffer 0x%x\n",
                 __func__, colorBufferHandle);
         return false;
     }
 
     if (cbNumBytes > sVkEmulation->staging.memory.size) {
-        fprintf(stderr,
+        ERR(
             "%s: Not enough space to read to staging buffer. "
             "Wanted: 0x%llx Have: 0x%llx\n", __func__,
             (unsigned long long)cbNumBytes,
@@ -1639,7 +1640,7 @@ bool updateVkImageFromColorBuffer(uint32_t colorBufferHandle) {
             sVkEmulation->staging.memory.mappedPtr);
 
     if (!readRes) {
-        fprintf(stderr, "%s: Failed to read color buffer 0x%x (at glReadPixels)\n",
+        ERR( "%s: Failed to read color buffer 0x%x (at glReadPixels)\n",
                 __func__, colorBufferHandle);
         return false;
     }

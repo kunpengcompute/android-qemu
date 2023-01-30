@@ -24,6 +24,9 @@
 
 #include <string.h>
 
+using VmiGetClientHandleFn = uint32_t (*)(uint32_t hostHandle);
+extern VmiGetClientHandleFn g_vmiGetClientHandle;
+
 namespace goldfish_vk {
 
 bool parseAndroidNativeBufferInfo(
@@ -48,6 +51,8 @@ VkResult prepareAndroidNativeBufferImage(
     const VkPhysicalDeviceMemoryProperties* memProps,
     AndroidNativeBufferInfo* out) {
 
+    LOG(INFO) << __FUNCTION__ << " is enter.";
+
     *out = {};
 
     out->device = device;
@@ -63,6 +68,11 @@ VkResult prepareAndroidNativeBufferImage(
     out->format = nativeBufferANDROID->format;
     out->stride = nativeBufferANDROID->stride;
     out->colorBufferHandle = *(nativeBufferANDROID->handle);
+    out->colorBufferHandle = g_vmiGetClientHandle(out->colorBufferHandle);
+
+    LOG(INFO) << "Get nativeBufferANDROID, handle:" << out->colorBufferHandle <<
+        ", stride:" << out->stride << ", format:" << out->format << ", usage:" << nativeBufferANDROID->usage <<
+        ", producer:" << nativeBufferANDROID->producer << ", consumer:" << nativeBufferANDROID->consumer;
 
     bool colorBufferVulkanCompatible =
         isColorBufferVulkanCompatible(out->colorBufferHandle);
@@ -100,7 +110,10 @@ VkResult prepareAndroidNativeBufferImage(
             vk->vkCreateImage(
                 device, &infoNoNative, pAllocator, &out->image);
 
-        if (createResult != VK_SUCCESS) return createResult;
+        if (createResult != VK_SUCCESS) {
+            LOG(ERROR) << "Failed to vkCreateImage, error:" << createResult;
+            return createResult;
+        }
 
         // Now import the backing memory.
         const auto& cbInfo = getColorBufferInfo(out->colorBufferHandle);
@@ -114,7 +127,7 @@ VkResult prepareAndroidNativeBufferImage(
         }
 
         if (!importExternalMemory(vk, device, &memInfo, &out->imageMemory)) {
-            fprintf(stderr, "%s: Failed to import external memory\n", __func__);
+            LOG(ERROR) << "Failed to import external memory\n";
             return VK_ERROR_INITIALIZATION_FAILED;
         }
 
@@ -123,7 +136,10 @@ VkResult prepareAndroidNativeBufferImage(
             vk->vkCreateImage(
                 device, &infoNoNative, pAllocator, &out->image);
 
-        if (createResult != VK_SUCCESS) return createResult;
+        if (createResult != VK_SUCCESS) {
+            LOG(ERROR) << "Failed to vkCreateImage, error:" << createResult;
+            return createResult;
+        }
 
         vk->vkGetImageMemoryRequirements(
             device, out->image, &out->memReqs);
@@ -263,6 +279,9 @@ VkResult prepareAndroidNativeBufferImage(
 
 void teardownAndroidNativeBufferImage(
     VulkanDispatch* vk, AndroidNativeBufferInfo* anbInfo) {
+
+    LOG(INFO) << __FUNCTION__ << " is enter.";
+
     auto device = anbInfo->device;
 
     auto image = anbInfo->image;
@@ -286,7 +305,7 @@ void teardownAndroidNativeBufferImage(
     anbInfo->acquireQueueState.teardown(vk, device);
 
     if (anbInfo->externallyBacked) {
-        teardownVkColorBuffer(anbInfo->colorBufferHandle);
+        teardownVkColorBuffer(g_vmiGetClientHandle(anbInfo->colorBufferHandle));
     }
 
     *anbInfo = {};
@@ -363,6 +382,8 @@ void AndroidNativeBufferInfo::QueueState::setup(
     VkQueue queueIn,
     uint32_t queueFamilyIndexIn) {
 
+    LOG(INFO) << __FUNCTION__ << " is enter.";
+
     queue = queueIn;
     queueFamilyIndex = queueFamilyIndexIn;
 
@@ -407,6 +428,8 @@ void AndroidNativeBufferInfo::QueueState::setup(
 void AndroidNativeBufferInfo::QueueState::teardown(
     VulkanDispatch* vk, VkDevice device) {
 
+    LOG(INFO) << __FUNCTION__ << " is enter.";
+
     if (cb) vk->vkFreeCommandBuffers(device, pool, 1, &cb);
     if (pool) vk->vkDestroyCommandPool(device, pool, nullptr);
     if (fence) vk->vkDestroyFence(device, fence, nullptr);
@@ -427,6 +450,8 @@ VkResult setAndroidNativeImageSemaphoreSignaled(
     VkFence fence,
     AndroidNativeBufferInfo* anbInfo) {
 
+    LOG(INFO) << __FUNCTION__ << " is enter.";
+
     auto fb = FrameBuffer::getFB();
 
     bool firstTimeSetup =
@@ -434,7 +459,6 @@ VkResult setAndroidNativeImageSemaphoreSignaled(
         !anbInfo->everAcquired;
 
     anbInfo->everAcquired = true;
-        // fprintf(stderr, "%s: call\n", __func__);
 
     if (firstTimeSetup) {
 
@@ -453,6 +477,8 @@ VkResult setAndroidNativeImageSemaphoreSignaled(
 
         // For GL interop, transfer back to present layout from general.
         if (anbInfo->isGlTexture) {
+            LOG(INFO) << __FUNCTION__ << " enter GlTextrue.";
+
             fb->setColorBufferInUse(anbInfo->colorBufferHandle, true);
 
             VkCommandBufferBeginInfo beginInfo = {
@@ -499,6 +525,8 @@ VkResult setAndroidNativeImageSemaphoreSignaled(
 
             vk->vkQueueSubmit(queueState.queue, 1, &submitInfo, fence);
         } else {
+            LOG(INFO) << __FUNCTION__ << " enter !GlTextrue.";
+
             const AndroidNativeBufferInfo::QueueState&
                 queueState = anbInfo->queueStates[anbInfo->lastUsedQueueFamilyIndex];
             VkSubmitInfo submitInfo = {
@@ -522,6 +550,8 @@ VkResult syncImageToColorBuffer(
     const VkSemaphore* pWaitSemaphores,
     int* pNativeFenceFd,
     AndroidNativeBufferInfo* anbInfo) {
+
+    LOG(INFO) << __FUNCTION__ << " is enter.";
 
     auto fb = FrameBuffer::getFB();
     fb->lock();

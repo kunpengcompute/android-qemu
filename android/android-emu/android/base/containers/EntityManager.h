@@ -26,8 +26,8 @@
 #define ENTITY_MANAGER_DEBUG 0
 
 #if ENTITY_MANAGER_DEBUG
-
-#define EM_DBG(fmt,...) fprintf(stderr, "%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
+#include "../android-emugl/shared/OpenglCodecCommon/ErrorLog.h"
+#define EM_DBG(fmt,...) DBG("%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
 
 #else
 #define EM_DBG(...)

@@ -605,3 +605,20 @@ GL_ENTRY(void, glSamplerParameterIivEXT, GLuint sampler, GLenum pname, const GLi
 GL_ENTRY(void, glSamplerParameterIuivEXT, GLuint sampler, GLenum pname, const GLuint *param);
 GL_ENTRY(void, glGetSamplerParameterIivEXT, GLuint sampler, GLenum pname, GLint *params);
 GL_ENTRY(void, glGetSamplerParameterIuivEXT, GLuint sampler, GLenum pname, GLuint *params);
+# Add OpenglES 3.2
+GL_ENTRY(void, glMinSampleShading, GLfloat value);
+GL_ENTRY(void, glFramebufferTexture, GLenum target, GLenum attachment, GLuint texture, GLint level)
+GL_ENTRY(void, glPatchParameteri, GLenum pname, GLint value)
+GL_ENTRY(void, glTexBuffer, GLenum target, GLenum internalFormat, GLuint buffer)
+GL_ENTRY(void, glTexBufferRange, GLenum target, GLenum internalFormat, GLuint buffer, GLintptr offset, GLsizeiptr size)
+GL_ENTRY(void, glPrimitiveBoundingBox, GLfloat minX, GLfloat minY, GLfloat minZ, GLfloat minW, GLfloat maxX, GLfloat maxY, GLfloat maxZ, GLfloat maxW)
+GL_ENTRY(void, glTexStorage3DMultisample, GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, GLsizei depth, GLboolean fixedsamplelocations)
+GL_ENTRY(void, glDrawElementsBaseVertex, GLenum mode, GLsizei count, GLenum type, void *indices, GLint basevertex)
+GL_ENTRY(void, glDrawElementsInstancedBaseVertex, GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei primcount, GLint basevertex)
+GL_ENTRY(void, glDrawElementsBaseVertexOffset, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLint basevertex)
+GL_ENTRY(void, glDrawElementsBaseVertexData, GLenum mode, GLsizei count, GLenum type, void *data, GLuint datalen, GLint basevertex)
+GL_ENTRY(void, glDrawElementsInstancedBaseVertexDataAEMU, GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei primcount, GLsizei datalen, GLint basevertex)
+GL_ENTRY(void, glDrawElementsInstancedBaseVertexOffsetAEMU, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLsizei primcount, GLint basevertex)
+GL_ENTRY(void, glGetnUniformfv, GLuint program, GLint location, GLsizei bufSize, GLfloat *params)
+GL_ENTRY(void, glGetnUniformiv, GLuint program, GLint location, GLsizei bufSize, GLint *params)
+GL_ENTRY(void, glGetnUniformuiv, GLuint program, GLint location, GLsizei bufSize, GLuint *params)

@@ -22,6 +22,7 @@
 #include "emugl/common/crash_reporter.h"
 #include "emugl/common/OpenGLDispatchLoader.h"
 #include "emugl/common/sync_device.h"
+#include "emugl/common/logging.h"
 
 #ifndef _MSC_VER
 #include <sys/time.h>
@@ -278,8 +279,8 @@ void SyncThread::doSyncBlockedWaitNoTimeline(SyncThreadCmd* cmd) {
            wait_result);
 
     if (wait_result != EGL_CONDITION_SATISFIED_KHR) {
-        fprintf(stderr, "error: eglClientWaitSync abnormal exit 0x%x\n",
-                wait_result);
+        ERR("error: eglClientWaitSync abnormal exit 0x%x\n",
+            wait_result);
     }
 }
 

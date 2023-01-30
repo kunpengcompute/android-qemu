@@ -1,11 +1,15 @@
 #!/bin/bash
 # android-qemu build shell
+# Copyright © Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
 
 cur_file_path=$(cd $(dirname "${0}");pwd)
 cd "${cur_file_path}"
 
+build_type=${2}
+
 AN_JOBS="$(grep processor /proc/cpuinfo | wc -l)"
-strip_tool=${AN_NDKDIR}/toolchains/aarch64-linux-android-4.9/prebuilt/linux-x86_64/bin/aarch64-linux-android-strip
+strip_tool=${AN_AOSPDIR}/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-strip
+strip_linux_tool=strip
 
 error()
 {
@@ -19,7 +23,9 @@ info()
 
 check_env()
 {
-    [ -z "${AN_NDKDIR}" ] && error "please set AN_NDKDIR is the path of NDK" && return -1
+    if [ "${build_type}" == "android" ];then
+        [ -z "${AN_NDKDIR}" ] && error "please set AN_NDKDIR is the path of NDK" && return -1
+    fi
     return 0
 }
 
@@ -27,9 +33,16 @@ ndk_compile()
 {
     target=${1}
     folder=${2}
-    echo "AN_NDKDIR:${AN_NDKDIR}"
-    cmake -DCMAKE_TOOLCHAIN_FILE=${AN_NDKDIR}/build/cmake/android.toolchain.cmake -DANDROID_ABI="${target}" -DANDROID_NDK=${AN_NDKDIR} -DANDROID_PLATFORM=android-22 ${folder}
-    [ ${?} != 0 ] && error "Failed to cmake" && return -1
+    if [ "${build_type}" == "android" ];then
+        echo "AN_NDKDIR:${AN_NDKDIR}"
+        cmake -DCMAKE_TOOLCHAIN_FILE=${AN_NDKDIR}/build/cmake/android.toolchain.cmake -DANDROID_ABI="${target}" -DANDROID_NDK=${AN_NDKDIR} -DANDROID_PLATFORM=android-22 ${folder}
+        [ ${?} != 0 ] && error "Failed to cmake" && return -1
+    else
+        echo "linux build"
+        cmake ${cur_file_path}/cmake -DREMOTE_RENDER=1
+        #cmake ${cur_file_path}/cmake
+        [ ${?} != 0 ] && error "Failed to cmake" && return -1
+    fi
     make -j${AN_JOBS}
     [ ${?} != 0 ] && error "Failed to cmake" && return -1
     rm -rf symbols
@@ -39,8 +52,13 @@ ndk_compile()
     do
         cp ${each_so} ./symbols
         [ ${?} != 0 ] && error "Failed to cp ${each_so} to symbol" && return -1
+    if [ "${build_type}" == "android" ];then
         ${strip_tool} -s ${each_so}
         [ ${?} != 0 ] && error "Failed to strip ${each_so}" && return -1
+    else
+        ${strip_linux_tool} -s ${each_so}
+        [ ${?} != 0 ] && error "Failed to strip ${each_so}" && return -1
+    fi
     done
     return 0
 }
@@ -88,7 +106,7 @@ inc()
     [ ${?} != 0 ] && return -1
     mkdir -p build
     cd build
-    ndk_compile armeabi-v7a ${cur_file_path}/cmake
+    ndk_compile arm64-v8a ${cur_file_path}/cmake
     [ ${?} != 0 ] && error "Failed to compile qemu" && return -1
     cd -
     package

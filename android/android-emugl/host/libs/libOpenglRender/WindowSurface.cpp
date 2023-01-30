@@ -103,12 +103,12 @@ bool WindowSurface::flushColorBuffer(EGLint *rects, EGLint rectsNum) {
     if (mAttachedColorBuffer->getWidth() != mWidth ||
         mAttachedColorBuffer->getHeight() != mHeight) {
         // XXX: should never happen - how this needs to be handled?
-        fprintf(stderr, "Dimensions do not match\n");
+        ERR("Dimensions do not match\n");
         return false;
     }
 
     if (!mDrawContext.get()) {
-        fprintf(stderr, "Draw context is NULL\n");
+        ERR("Draw context is NULL\n");
         return false;
     }
 
@@ -124,7 +124,7 @@ bool WindowSurface::flushColorBuffer(EGLint *rects, EGLint rectsNum) {
                                   mSurface,
                                   mSurface,
                                   mDrawContext->getEGLContext())) {
-            fprintf(stderr, "Error making draw context current\n");
+            ERR("Error making draw context current\n");
             return false;
         }
     }
@@ -178,7 +178,7 @@ bool WindowSurface::resize(unsigned int p_width, unsigned int p_height)
                                              mConfig,
                                              pbufAttribs);
     if (mSurface == EGL_NO_SURFACE) {
-        fprintf(stderr, "Renderer error: failed to create/resize pbuffer!!\n");
+        ERR("Renderer error: failed to create/resize pbuffer!!\n");
         return false;
     }
 

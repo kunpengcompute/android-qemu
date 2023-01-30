@@ -244,6 +244,10 @@ private:
     static GLuint gles2_APIENTRY s_glGetProgramResourceIndex(void* self, GLuint program, GLenum programInterface, const char * name);
     static GLint gles2_APIENTRY s_glGetProgramResourceLocation(void* self, GLuint program, GLenum programInterface, const char * name);
     static void gles2_APIENTRY s_glGetProgramResourceName(void* self, GLuint program, GLenum programInterface, GLuint index, GLsizei bufSize, GLsizei * length, char * name);
+    static void gles2_APIENTRY s_glDrawElementsBaseVertexOffset(void* self, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLint basevertex);
+    static void gles2_APIENTRY s_glDrawElementsBaseVertexData(void* self, GLenum mode, GLsizei count, GLenum type, void *data, GLuint datalen, GLint basevertex);
+    static void gles2_APIENTRY s_glDrawElementsInstancedBaseVertexDataAEMU(void* self, GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei primcount, GLsizei datalen, GLint basevertex);
+    static void gles2_APIENTRY s_glDrawElementsInstancedBaseVertexOffsetAEMU(void* self, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLsizei primcount, GLint basevertex);
 
 };
 #endif

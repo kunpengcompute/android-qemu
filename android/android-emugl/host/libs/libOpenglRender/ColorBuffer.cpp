@@ -22,6 +22,7 @@
 #include "TextureDraw.h"
 #include "TextureResize.h"
 #include "YUVConverter.h"
+#include "FrameBuffer.h"
 
 #include "OpenGLESDispatch/EGLDispatch.h"
 
@@ -31,6 +32,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <mutex>
 
 #ifdef NDEBUG
 #define DEBUG_CB_FBO 0
@@ -188,7 +190,7 @@ static bool sGetFormatParameters(
             *sizedInternalFormat = GL_RG8;
             return true;
         default:
-            fprintf(stderr, "%s: Unknown format 0x%x\n",
+            ERR("%s: Unknown format 0x%x\n",
                     __func__, internalFormat);
             return false;
     }
@@ -214,7 +216,7 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
             &texFormat, &pixelType, &bytesPerPixel,
             &p_sizedInternalFormat,
             &isBlob)) {
-        fprintf(stderr, "ColorBuffer::create invalid format 0x%x\n",
+        ERR("ColorBuffer::create invalid format 0x%x\n",
                 p_internalFormat);
         return NULL;
     }
@@ -229,10 +231,9 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
         android::base::ScopedCPtr<char> initData(
                 static_cast<char*>(::malloc(bufsize)));
         if (!initData) {
-            fprintf(stderr,
-                    "error: failed to allocate initial memory for ColorBuffer "
-                    "of size %dx%dx%d (%lu KB)\n",
-                    p_width, p_height, bytesPerPixel * 8, bufsize / 1024);
+            ERR("error: failed to allocate initial memory for ColorBuffer "
+                "of size %dx%dx%d (%lu KB)\n",
+                p_width, p_height, bytesPerPixel * 8, bufsize / 1024);
             return nullptr;
         }
         memset(initData.get(), 0x0, bufsize);
@@ -269,10 +270,10 @@ ColorBuffer* ColorBuffer::create(EGLDisplay p_display,
     s_gles2.glGenTextures(1, &cb->m_blitTex);
     s_gles2.glBindTexture(GL_TEXTURE_2D, cb->m_blitTex);
     s_gles2.glTexImage2D(GL_TEXTURE_2D, 0, p_internalFormat, p_width, p_height,
-                         0, texFormat, pixelType, NULL);
+                         0, texFormat, pixelType, initialImage.get());
 
-    s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     s_gles2.glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
@@ -335,6 +336,11 @@ ColorBuffer::~ColorBuffer() {
     if (m_fbo) {
         s_gles2.glDeleteFramebuffers(1, &m_fbo);
     }
+#ifdef REMOTE_RENDER
+    if (m_encodeFBO) {
+        s_gles2.glDeleteFramebuffers(1, &m_encodeFBO);
+    }
+#endif
 
     if (m_yuv_conversion_fbo) {
         s_gles2.glDeleteFramebuffers(1, &m_yuv_conversion_fbo);
@@ -352,6 +358,15 @@ ColorBuffer::~ColorBuffer() {
     if (m_memoryObject) {
         s_gles2.glDeleteMemoryObjectsEXT(1, &m_memoryObject);
     }
+
+    if (m_productFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_productFence);
+        m_productFence = EGL_NO_SYNC_KHR;
+    }
+    if (m_comuseFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_comuseFence);
+        m_comuseFence = EGL_NO_SYNC_KHR;
+    }
 }
 
 void ColorBuffer::readPixels(int x,
@@ -367,7 +382,10 @@ void ColorBuffer::readPixels(int x,
     }
     p_format = sGetUnsizedColorBufferFormat(p_format);
     touch();
-
+    if (m_isFlushColorbuffer) {
+        flush();
+    }
+    waitProductSync();
     if (bindFbo(&m_fbo, m_tex)) {
         GLint prevAlignment = 0;
         s_gles2.glGetIntegerv(GL_PACK_ALIGNMENT, &prevAlignment);
@@ -415,7 +433,7 @@ void ColorBuffer::readPixelsYUVCached(int x,
     touch();
 
 #if DEBUG_CB_FBO
-    fprintf(stderr, "%s %d request width %d height %d\n", __func__, __LINE__,
+    ERR("%s %d request width %d height %d\n", __func__, __LINE__,
             width, height);
     memset(pixels, 0x00, pixels_size);
     assert(m_yuv_converter.get());
@@ -433,7 +451,7 @@ void ColorBuffer::reformat(GLint internalformat, GLenum type) {
     int bpp = 4;
     bool isBlob = false;
     if (!sGetFormatParameters(internalformat, &texFormat, &pixelType, &bpp, &sizedInternalFormat, &isBlob)) {
-        fprintf(stderr, "%s: WARNING: reformat failed. internal format: 0x%x\n",
+        ERR("%s: WARNING: reformat failed. internal format: 0x%x\n",
                 __func__, internalformat);
     }
 
@@ -491,9 +509,8 @@ void ColorBuffer::swapYUVTextures(uint32_t type, uint32_t* textures) {
     if (type == FRAMEWORK_FORMAT_NV12) {
         m_yuv_converter->swapTextures(type, textures);
     } else {
-        fprintf(stderr,
-                "%s: ERROR: format other than NV12 is not supported: 0x%x\n",
-                __func__, type);
+        ERR("%s: ERROR: format other than NV12 is not supported: 0x%x\n",
+            __func__, type);
     }
 }
 
@@ -510,7 +527,7 @@ void ColorBuffer::subUpdate(int x,
     if (!context.isOk()) {
         return;
     }
-
+    waitConsumeSync();
     touch();
 
     if (m_needFormatCheck) {
@@ -540,6 +557,12 @@ void ColorBuffer::subUpdate(int x,
                                 p_type, pixels);
     }
 
+    if (m_productFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_productFence);
+        m_productFence = EGL_NO_SYNC_KHR;
+    }
+    m_productFence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
+    setIsFlushColorbuffer(false);
     if (m_fastBlitSupported) {
         s_gles2.glFlush();
         m_sync = (GLsync)s_egl.eglSetImageFenceANDROID(m_display, m_eglImage);
@@ -549,13 +572,12 @@ void ColorBuffer::subUpdate(int x,
 bool ColorBuffer::replaceContents(const void* newContents, size_t numBytes) {
     RecursiveScopedHelperContext context(m_helper);
     if (!context.isOk()) {
-        fprintf(stderr, "%s: Failed: Could not get current context\n", __func__);
+        ERR("%s: Failed: Could not get current context\n", __func__);
         return false;
     }
 
     if (m_numBytes != numBytes) {
-        fprintf(stderr,
-            "%s: Error: Tried to replace contents of ColorBuffer with "
+        ERR("%s: Error: Tried to replace contents of ColorBuffer with "
             "%zu bytes (expected %zu; GL format info: 0x%x 0x%x 0x%x); ",
             __func__,
             numBytes,
@@ -590,10 +612,16 @@ void ColorBuffer::updateYuv(int x,
                             int32_t yuvFormat,
                             void* pixels) {
     RecursiveScopedHelperContext context(m_helper);
-	bindFbo(&m_fbo, m_tex);
-	m_helper->getYuvDraw()->Draw(x, y, width, height, yuvFormat, static_cast<uint8_t *>(pixels));
-    s_gles2.glFinish();
-	unbindFbo();
+    waitConsumeSync();
+    bindFbo(&m_fbo, m_tex);
+    m_helper->getYuvDraw()->Draw(x, y, width, height, yuvFormat, static_cast<uint8_t *>(pixels));
+    unbindFbo();
+    if (m_productFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_productFence);
+        m_productFence = EGL_NO_SYNC_KHR;
+    }
+    m_productFence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
+    setIsFlushColorbuffer(false);
 }
 
 bool ColorBuffer::readContents(size_t* numBytes, void* pixels) {
@@ -607,13 +635,46 @@ bool ColorBuffer::readContents(size_t* numBytes, void* pixels) {
     return true;
 }
 
+bool ColorBuffer::flush() {
+    RecursiveScopedHelperContext context(m_helper);
+    if (!context.isOk()) {
+        ERR("Failed to get context");
+        return false;
+    }
+
+    if (!bindFbo(&m_fbo, m_tex)) {
+        ERR("Failed to bind fbo");
+        return false;
+    }
+
+    // Save current viewport and match it to the current colorbuffer size.
+    GLint vport[4] = {
+        0,
+    };
+    s_gles2.glGetIntegerv(GL_VIEWPORT, vport);
+    s_gles2.glViewport(0, 0, m_width, m_height);
+    waitProductSync();
+    // render m_blitTex
+    m_helper->getTextureDraw()->draw(m_blitTex, 360., 0, 0);
+
+    // Restore previous viewport.
+    s_gles2.glViewport(vport[0], vport[1], vport[2], vport[3]);
+    unbindFbo();
+    if (m_productFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_productFence);
+        m_productFence = EGL_NO_SYNC_KHR;
+    }
+    m_productFence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
+    return true;
+}
+
 bool ColorBuffer::blitFromCurrentReadBuffer() {
     RenderThreadInfo* tInfo = RenderThreadInfo::get();
     if (!tInfo->currContext.get()) {
         // no Current context
         return false;
     }
-
+    waitConsumeSync();
     touch();
 
     if (m_fastBlitSupported) {
@@ -688,7 +749,6 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                     // cocos应用有一个不刷新的colorbuffer，在mate30上会导致花屏，因此对特殊处理
                     // cocos应用第一次flush时清空framebuffer数据,避免花屏
                     if (RenderThreadInfo::get()->procName == "org.cocos2d.examplecases") {
-                        ERR("is cocos");
                         s_gles2.glClearColor(0.0, 0.0, 0.0, 0.0);
                         s_gles2.glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                         s_gles2.glClear(GL_COLOR_BUFFER_BIT);
@@ -757,35 +817,20 @@ bool ColorBuffer::blitFromCurrentReadBuffer() {
                 s_gles2.glBindFramebuffer(GL_FRAMEBUFFER, (GLuint)prev_fbo);
             }
         }
-        EGLSyncKHR fence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
-        RecursiveScopedHelperContext context(m_helper);
-        if (!context.isOk()) {
-            s_egl.eglDestroySyncKHR(m_display, fence);
-            return false;
+
+        if (tInfo->procName != "com.drawelements.deqp:testercore") {
+	    if (m_productFence != EGL_NO_SYNC_KHR) {
+                s_egl.eglDestroySyncKHR(m_display, m_productFence);
+                m_productFence = EGL_NO_SYNC_KHR;
+            }
+            m_productFence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
         }
 
-        if (!bindFbo(&m_fbo, m_tex)) {
-            s_egl.eglDestroySyncKHR(m_display, fence);
-            return false;
-        }
-
-        // Save current viewport and match it to the current colorbuffer size.
-        GLint vport[4] = {
-            0,
-        };
-        s_gles2.glGetIntegerv(GL_VIEWPORT, vport);
-        s_gles2.glViewport(0, 0, m_width, m_height);
-        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, fence,
-                                                EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
-        s_egl.eglDestroySyncKHR(m_display, fence);
-        // render m_blitTex
-        m_helper->getTextureDraw()->draw(m_blitTex, 0., 0, 0);
-
-        // Restore previous viewport.
-        s_gles2.glViewport(vport[0], vport[1], vport[2], vport[3]);
-        unbindFbo();
+#if !SKIP_FLUSH
+        flush();
+#endif
+        setIsFlushColorbuffer(true);
     }
-
     return true;
 }
 
@@ -799,9 +844,29 @@ bool ColorBuffer::bindToTexture() {
         return false;
     }
     touch();
-
+    EGLImageKHR temp = nullptr;
+#if SKIP_FLUSH
+    if (tInfo->m_isSurfaceFlinger) {
+        if (m_isFlushColorbuffer) {
+            tInfo->m_isNeedChange = true;
+            temp = m_blitEGLImage;
+            tInfo->m_curBindImages = m_eglImage;
+        } else {
+            tInfo->m_isNeedChange = false;
+            temp = m_eglImage;
+        }
+    } else {
+        if (m_isFlushColorbuffer) {
+            flush();
+        }
+        temp = m_eglImage;
+    }
+#else
+    temp = m_eglImage;
+#endif
+    waitProductSync();
     if (tInfo->currContext->clientVersion() > GLESApi_CM) {
-        s_gles2.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, m_eglImage);
+        s_gles2.glEGLImageTargetTexture2DOES(GL_TEXTURE_2D, temp);
     } else {
         ERR("not support gles 1.0");
     }
@@ -836,16 +901,20 @@ bool ColorBuffer::bindToRenderbuffer() {
 }
 
 GLuint ColorBuffer::scale() {
+#if SKIP_FLUSH
+    return m_blitTex;
+#else
     return m_tex;
+#endif
 }
 
 void ColorBuffer::setSync(bool debug) {
     m_sync = (GLsync)s_egl.eglSetImageFenceANDROID(m_display, m_eglImage);
-    if (debug) fprintf(stderr, "%s: %u to %p\n", __func__, getHndl(), m_sync);
+    if (debug) ERR("%s: %u to %p\n", __func__, getHndl(), m_sync);
 }
 
 void ColorBuffer::waitSync(bool debug) {
-    if (debug) fprintf(stderr, "%s: %u sync %p\n", __func__, getHndl(), m_sync);
+    if (debug) ERR("%s: %u sync %p\n", __func__, getHndl(), m_sync);
     if (m_sync) {
         s_egl.eglWaitImageFenceANDROID(m_display, m_sync);
     }
@@ -857,12 +926,27 @@ bool ColorBuffer::post(GLuint tex, float rotation, float dx, float dy) {
     return m_helper->getTextureDraw()->draw(tex, rotation, dx, dy);
 }
 
-bool ColorBuffer::postWithOverlay(GLuint tex, float rotation, float dx, float dy) {
+bool ColorBuffer::postWithOverlay(GLuint tex, float rotation, float dx, float dy, GLuint& encTex) {
     // NOTE: Do not call m_helper->setupContext() here!
-    waitSync();
     dx = 0.0;
     dy = 0.0;
-    return m_helper->getTextureDraw()->drawWithOverlay(tex, rotation, dx, dy);
+
+    waitSync();
+    waitProductSync();
+    bool ret = m_helper->getTextureDraw()->drawWithOverlay(tex, rotation, dx, dy);
+
+#ifdef REMOTE_RENDER
+    // 将渲染的帧缓冲数据拷贝到纹理encodeTex
+    if (bindFbo(&m_encodeFBO, tex)) {
+        // 将帧缓冲数据复制到encTex纹理上
+        s_gles2.glBindTexture(GL_TEXTURE_2D, encTex);
+        s_gles2.glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, m_width, m_height);
+        unbindFbo();
+    }
+#endif
+
+    createConsumeSync();
+    return ret;
 }
 
 void ColorBuffer::readback(unsigned char* img, bool readbackBgra) {
@@ -977,7 +1061,7 @@ GLuint ColorBuffer::getTexture() {
 }
 
 void ColorBuffer::postLayer(ComposeLayer* l, int frameWidth, int frameHeight) {
-    if (m_inUse) fprintf(stderr, "%s: cb in use\n", __func__);
+    if (m_inUse) ERR("%s: cb in use\n", __func__);
     waitSync();
     m_helper->getTextureDraw()->drawLayer(l, frameWidth, frameHeight, m_width, m_height, m_tex);
 }
@@ -1055,3 +1139,57 @@ bool ColorBuffer::importMemory(
 void ColorBuffer::setInUse(bool inUse) {
     m_inUse = inUse;
 }
+
+void ColorBuffer::waitProductSync() {
+    if (m_productFence != EGL_NO_SYNC_KHR) {
+        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, m_productFence,
+            EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
+        s_egl.eglDestroySyncKHR(m_display, m_productFence);
+        m_productFence = EGL_NO_SYNC_KHR;
+    }
+}
+
+void ColorBuffer::waitConsumeSync() {
+    {
+        std::unique_lock<std::mutex> lock(m_consumeWait);
+        if (m_isNeedWaitConsume) {
+            auto ret = m_consumeWaitCv.wait_for(lock, std::chrono::milliseconds(100), [this]() -> bool {
+                return !m_isNeedWaitConsume || (FrameBuffer::getFB() != nullptr && FrameBuffer::getFB()->getExitFlag());
+            });
+            if (!ret) {
+                ERR("Failed to wait colorbuffer:%#x comsume", mHndl);
+            }
+        }
+    }
+    if (m_comuseFence != EGL_NO_SYNC_KHR) {
+        EGLint waitStatus = s_egl.eglClientWaitSyncKHR(m_display, m_comuseFence,
+            EGL_SYNC_FLUSH_COMMANDS_BIT_KHR, 2000000000);
+        s_egl.eglDestroySyncKHR(m_display, m_comuseFence);
+        m_comuseFence = EGL_NO_SYNC_KHR;
+    }
+}
+
+void ColorBuffer::setNeedWaitConsume() {
+    std::unique_lock<std::mutex> lock(m_consumeWait);
+    m_isNeedWaitConsume = true;
+}
+
+void ColorBuffer::createConsumeSync() {
+    if (m_comuseFence != EGL_NO_SYNC_KHR) {
+        s_egl.eglDestroySyncKHR(m_display, m_comuseFence);
+        m_comuseFence = EGL_NO_SYNC_KHR;
+    }
+    m_comuseFence = s_egl.eglCreateSyncKHR(m_display, EGL_SYNC_FENCE_KHR, NULL);
+    std::unique_lock<std::mutex> lock(m_consumeWait);
+    m_isNeedWaitConsume = false;
+    m_consumeWaitCv.notify_all();
+}
+
+void ColorBuffer::setIsFlushColorbuffer(bool isFlush) {
+    if (m_isFlushColorbuffer == isFlush) {
+        return;
+    }
+    INFO("Change colorbuffer:%#x flush %d to %d", mHndl, static_cast<int>(m_isFlushColorbuffer), static_cast<int>(isFlush));
+    m_isFlushColorbuffer = isFlush;
+}
+

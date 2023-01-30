@@ -25,7 +25,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
-
+#include "IOStream.h"
 
 #include <memory>
 
@@ -36,22 +36,17 @@ class Pool;
 } // namespace base
 
 
-
-
-
-
-
-class IOStream;
-
 class VkDecoder {
 public:
     VkDecoder();
+    VkDecoder(VkIOStream* ioStream);
     ~VkDecoder();
     void setForSnapshotLoad(bool forSnapshotLoad);
-    size_t decode(void* buf, size_t bufsize, IOStream* stream);
+    size_t decode(void* buf, size_t bufsize, IOStream*);
 private:
     class Impl;
     std::unique_ptr<Impl> mImpl;
+    VkIOStream* m_ioStream;
 };
 #ifdef VK_VERSION_1_0
 #endif

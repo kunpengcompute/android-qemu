@@ -25,7 +25,7 @@
 #include "android/emulation/control/window_agent.h"
 #include "android/emulation/HostmemIdMapping.h"
 #include "android/featurecontrol/FeatureControl.h"
-#include "android/globals.h"
+
 #include "android/opengl/emugl_config.h"
 #include "android/opengles-pipe.h"
 #include "android/opengles.h"
@@ -35,6 +35,7 @@
 #include <fstream>
 #include <string>
 
+#if 0
 #include <stdio.h>
 
 #include "VulkanDispatch.h"
@@ -476,6 +477,7 @@ extern "C" VG_EXPORT void get_pixels(void* pixels, uint32_t bytes) {
 extern "C" const GoldfishPipeServiceOps* goldfish_pipe_get_service_ops() {
     return &goldfish_pipe_service_ops;
 }
+#endif
 
 static const QAndroidVmOperations sQAndroidVmOperations = {
     .vmStop = []() -> bool { fprintf(stderr, "goldfish-opengl vm ops: vm stop\n"); return true; },

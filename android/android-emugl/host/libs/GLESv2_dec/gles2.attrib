@@ -1089,7 +1089,7 @@ glGetProgramPipelineInfoLog
     var_flag length nullAllowed
 
 glCreateShaderProgramv
-    flag unsupported
+    flag custom_decoder
 
 glCreateShaderProgramvAEMU
     len packedStrings packedLen
@@ -1483,3 +1483,19 @@ glFlushMappedBufferRangeAEMU2
     flag custom_decoder
     flag not_api
     custom_host_api glFlushMappedBufferRangeAEMU
+
+glDrawElementsBaseVertexOffset
+    flag custom_decoder
+    flag not_api
+
+glDrawElementsBaseVertexData
+    flag custom_decoder
+    flag not_api
+
+glDrawElementsInstancedBaseVertexDataAEMU
+    flag custom_decoder
+    flag not_api
+
+glDrawElementsInstancedBaseVertexOffsetAEMU
+    flag custom_decoder
+    flag not_api

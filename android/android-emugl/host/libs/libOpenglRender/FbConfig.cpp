@@ -25,7 +25,7 @@
 
 namespace {
 
-#define E(...)  fprintf(stderr, __VA_ARGS__)
+#define E(...)  ERR(__VA_ARGS__)
 
 #ifndef EGL_PRESERVED_RESOURCES
 #define EGL_PRESERVED_RESOURCES 0x3030

@@ -126,7 +126,7 @@ GoldfishOpenglTestEnv::GoldfishOpenglTestEnv() {
     android::featurecontrol::setEnabledOverride(
             android::featurecontrol::RefCountPipe, true);
     android::featurecontrol::setEnabledOverride(
-            android::featurecontrol::GLDirectMem, true);
+            android::featurecontrol::GLDirectMem, false);
     android::featurecontrol::setEnabledOverride(
             android::featurecontrol::Vulkan, true);
     android::featurecontrol::setEnabledOverride(

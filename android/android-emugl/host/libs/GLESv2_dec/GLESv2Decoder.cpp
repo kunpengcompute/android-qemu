@@ -33,6 +33,7 @@
 #include <vector>
 
 #include <string.h>
+#include "RenderThreadInfo.h"
 
 using android::base::AutoLock;
 using android::base::StaticLock;
@@ -156,9 +157,14 @@ int GLESv2Decoder::initGL(get_proc_func_t getProcFunc, void *getProcFuncData)
     glIsSyncAEMU = s_glIsSyncAEMU;
     glGetSyncivAEMU = s_glGetSyncivAEMU;
     glDeleteSyncAEMU = s_glDeleteSyncAEMU;
+    glDrawElementsBaseVertexOffset = s_glDrawElementsBaseVertexOffset;
+    glDrawElementsBaseVertexData = s_glDrawElementsBaseVertexData;
+    glDrawElementsInstancedBaseVertexDataAEMU = s_glDrawElementsInstancedBaseVertexDataAEMU;
+    glDrawElementsInstancedBaseVertexOffsetAEMU = s_glDrawElementsInstancedBaseVertexOffsetAEMU;
 
     OVERRIDE_DEC(glCreateShader)
     OVERRIDE_DEC(glCreateProgram)
+    OVERRIDE_DEC(glCreateShaderProgramv)
 
     OVERRIDE_DEC(glGenBuffers)
 
@@ -296,16 +302,31 @@ void GLESv2Decoder::s_glVertexAttribPointerData(void *self, GLuint indx, GLint s
 {
     GLESv2Decoder *ctx = (GLESv2Decoder *) self;
     if (ctx->m_contextData != NULL) {
+#if SKIP_FLUSH
+        RenderThreadInfo* tInfo = RenderThreadInfo::get();
+        if (tInfo != nullptr && tInfo->m_isSurfaceFlinger && tInfo->m_isNeedChange) {
+            if (datalen == 32) {
+                GLint curProgram = 0;
+                ctx->glGetIntegerv(GL_CURRENT_PROGRAM, &curProgram);
+                GLint location = ctx->glGetAttribLocation(curProgram, "texCoords");
+                if (indx == location) {
+                    float* oldData = (float *)(data);
+                    oldData[0 * 2 + 1] = 1.0 - oldData[0 * 2 + 1];
+                    oldData[1 * 2 + 1] = 1.0 - oldData[1 * 2 + 1];
+                    oldData[2 * 2 + 1] = 1.0 - oldData[2 * 2 + 1];
+                    oldData[3 * 2 + 1] = 1.0 - oldData[3 * 2 + 1];
+                }
+            }
+        }
+#endif
         ctx->m_contextData->storePointerData(indx, data, datalen);
         // note - the stride of the data is always zero when it comes out of the codec.
         // See gl2.attrib for the packing function call.
-        if ((void*)ctx->glVertexAttribPointerWithDataSize != gles2_unimplemented) {
-            ctx->glVertexAttribPointerWithDataSize(indx, size, type, normalized,
-                    0, ctx->m_contextData->pointerData(indx), datalen);
-        } else {
-            ctx->glVertexAttribPointer(indx, size, type, normalized, 0,
-                    ctx->m_contextData->pointerData(indx));
-        }
+
+        // 解决分布式渲染SurfaceFlinger合成无图片的问题
+        // 虽然glVertexAttribPointerWithDataSize在linux服务器上加载时导出了符号，但实际执行渲染无效果
+        // Android平台固定走如下分支，对其无影响
+        ctx->glVertexAttribPointer(indx, size, type, normalized, 0, ctx->m_contextData->pointerData(indx));
     }
 }
 
@@ -620,6 +641,11 @@ void GLESv2Decoder::s_glDrawElementsInstancedDataAEMU(void* self, GLenum mode, G
 void GLESv2Decoder::s_glReadPixelsOffsetAEMU(void* self, GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, GLuint offset) {
     GLESv2Decoder *ctx = (GLESv2Decoder *)self;
     ctx->glReadPixels(x, y, width, height, format, type, SafePointerFromUInt(offset));
+}
+
+GLuint GLESv2Decoder::s_glCreateShaderProgramv(void* self, GLenum type, GLsizei count, const char** strings){
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    return ctx->glCreateShaderProgramv(type, count, strings);
 }
 
 GLuint GLESv2Decoder::s_glCreateShaderProgramvAEMU(void* self, GLenum type, GLsizei count, const char* packedStrings, GLuint packedLen) {
@@ -966,3 +992,27 @@ SNAPSHOT_PROGRAM_CALL(glGetProgramResourceiv, (void* self,  GLuint program, GLen
 SNAPSHOT_PROGRAM_CALL_RET(GLuint, glGetProgramResourceIndex, (void* self, GLuint program, GLenum programInterface, const char * name), (program, programInterface, name))
 SNAPSHOT_PROGRAM_CALL_RET(GLint, glGetProgramResourceLocation, (void* self, GLuint program, GLenum programInterface, const char * name), (program, programInterface, name))
 SNAPSHOT_PROGRAM_CALL(glGetProgramResourceName, (void* self,  GLuint program, GLenum programInterface, GLuint index, GLsizei bufSize, GLsizei* length, char* name), (program, programInterface, index, bufSize, length, name))
+
+void GLESv2Decoder::s_glDrawElementsBaseVertexOffset(void* self, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLint basevertex)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    ctx->glDrawElementsBaseVertex(mode, count, type, SafePointerFromUInt(offset), basevertex);
+}
+
+void GLESv2Decoder::s_glDrawElementsBaseVertexData(void* self, GLenum mode, GLsizei count, GLenum type, void *data, GLuint datalen, GLint basevertex)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    ctx->glDrawElementsBaseVertex(mode, count, type, data, basevertex);
+}
+
+void GLESv2Decoder::s_glDrawElementsInstancedBaseVertexDataAEMU(void* self, GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei primcount, GLsizei datalen, GLint basevertex)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    ctx->glDrawElementsInstancedBaseVertex(mode, count, type, indices, primcount, basevertex);
+}
+
+void GLESv2Decoder::s_glDrawElementsInstancedBaseVertexOffsetAEMU(void* self, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLsizei primcount, GLint basevertex)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    ctx->glDrawElementsInstancedBaseVertex(mode, count, type, SafePointerFromUInt(offset), primcount, basevertex);
+}

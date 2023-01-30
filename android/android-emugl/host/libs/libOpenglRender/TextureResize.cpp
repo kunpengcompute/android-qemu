@@ -30,8 +30,7 @@
 #include <string>
 #include <utility>
 
-#define ERR(...)  fprintf(stderr, __VA_ARGS__)
-#define V(...)  VERBOSE_PRINT(gles,__VA_ARGS__)
+#define V(...)  DBG(__VA_ARGS__)
 #define MAX_FACTOR_POWER 4
 
 static const char kCommonShaderSource[] =
@@ -460,7 +459,7 @@ TextureResize::GenericResizer::GenericResizer() :
     if (success == GL_FALSE) {
         GLchar infolog[256];
         s_gles2.glGetProgramInfoLog(mProgram, sizeof(infolog), 0, infolog);
-        fprintf(stderr, "Could not create/link program: %s\n", infolog);
+        ERR("Could not create/link program: %s\n", infolog);
         return;
     }
 

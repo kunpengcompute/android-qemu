@@ -50,3 +50,11 @@ EMUGL_COMMON_API void set_emugl_cxt_logger(emugl_logger_t f);
 #else
 #define GL_LOG(...) 0
 #endif
+
+// android 系统可适配如下日志输出
+#ifdef __ANDROID__
+#ifdef fprintf
+#undef fprintf
+#endif
+#define fprintf(stderr, ...) __android_log_print(ANDROID_LOG_ERROR, "EMUGL", __VA_ARGS__)
+#endif

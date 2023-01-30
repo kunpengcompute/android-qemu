@@ -167,7 +167,7 @@ void* LoadLibrary(const android_dlextinfo& dlextinfo,
     auto res = android_dlopen_ext(expectedLibPath.c_str(), RTLD_LOCAL | RTLD_NOW,
                                   &dlextinfo);
     if (!res) {
-        fprintf(stderr, "%s: failed. dlerror; [%s]\n", __func__, dlerror());
+        ALOGE("%s: failed. dlerror; [%s]\n", __func__, dlerror());
     }
 
     return res;

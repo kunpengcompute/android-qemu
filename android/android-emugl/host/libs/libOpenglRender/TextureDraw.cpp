@@ -13,15 +13,17 @@
 // limitations under the License.
 
 #include "TextureDraw.h"
-
+#include <mutex>
 #include "DispatchTables.h"
 
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
-#define ERR(...)  fprintf(stderr, __VA_ARGS__)
+#include "ErrorLog.h"
+
 
 namespace {
+    std::mutex g_mutex;
 
 // Helper function to create a new shader.
 // |shaderType| is the shader type (e.g. GL_VERTEX_SHADER).
@@ -122,20 +124,45 @@ const Vertex kVertices[] = {
     {{ -1, +1, +0 }, { +1, +1 }},
     {{ -1, -1, +0 }, { +1, +0 }},
     // flip vertically
+#if SKIP_FLUSH
+    {{ +1, -1, +0 }, { +1, +0 }},
+    {{ +1, +1, +0 }, { +1, +1 }},
+    {{ -1, +1, +0 }, { +0, +1 }},
+    {{ -1, -1, +0 }, { +0, +0 }},
+#else
     {{ +1, -1, +0 }, { +1, +1 }},
     {{ +1, +1, +0 }, { +1, +0 }},
     {{ -1, +1, +0 }, { +0, +0 }},
     {{ -1, -1, +0 }, { +0, +1 }},
+#endif
     // flip source image horizontally, the rotate 90 degrees clock-wise
+#if SKIP_FLUSH
+    {{ +1, -1, +0 }, { +0, +0 }},
+    {{ +1, +1, +0 }, { +1, +0 }},
+    {{ -1, +1, +0 }, { +1, +1 }},
+    {{ -1, -1, +0 }, { +0, +1 }},
+#else
     {{ +1, -1, +0 }, { +0, +1 }},
     {{ +1, +1, +0 }, { +1, +1 }},
     {{ -1, +1, +0 }, { +1, +0 }},
     {{ -1, -1, +0 }, { +0, +0 }},
+#endif
     // flip source image vertically, the rotate 90 degrees clock-wise
+#if SKIP_FLUSH
+    {{ +1, -1, +0 }, { +1, +1 }},
+    {{ +1, +1, +0 }, { +0, +1 }},
+    {{ -1, +1, +0 }, { +0, +0 }},
+    {{ -1, -1, +0 }, { +1, +0 }},
+#else
     {{ +1, -1, +0 }, { +1, +0 }},
     {{ +1, +1, +0 }, { +0, +0 }},
     {{ -1, +1, +0 }, { +0, +1 }},
     {{ -1, -1, +0 }, { +1, +1 }},
+#endif
+    {{ +1, -1, +0 }, { +1, +1 }}, // new
+    {{ +1, +1, +0 }, { +1, +0 }},
+    {{ -1, +1, +0 }, { +0, +0 }},
+    {{ -1, -1, +0 }, { +0, +1 }},
 };
 
 // Vertex indices for predefined rotation angles.
@@ -147,7 +174,8 @@ const GLubyte kIndices[] = {
     16, 17, 18 ,18, 19, 16, // flip h
     20, 21, 22, 22, 23, 20, // flip v
     24, 25, 26, 26, 27, 24, // flip h, 90
-    28, 29, 30, 30, 31, 28  // flip v, 90
+    28, 29, 30, 30, 31, 28, // flip v, 90
+    32, 33, 34, 34, 35, 32
 };
 
 const GLint kIndicesLen = sizeof(kIndices) / sizeof(kIndices[0]);
@@ -247,6 +275,7 @@ TextureDraw::TextureDraw() :
 
 bool TextureDraw::drawImpl(GLuint texture, float rotation,
                            float dx, float dy, bool wantOverlay) {
+    std::lock_guard<std::mutex> curLock(g_mutex);
     if (!mProgram) {
         ERR("%s: no program\n", __FUNCTION__);
         return false;
@@ -336,7 +365,6 @@ bool TextureDraw::drawImpl(GLuint texture, float rotation,
 
     // We may only get 0, 90, 180, 270 in |rotation| so far.
     const int intRotation = ((int)rotation)/90;
-    assert(intRotation >= 0 && intRotation <= 3);
     intptr_t indexShift = 0;
     switch (intRotation) {
     case 0:
@@ -351,8 +379,10 @@ bool TextureDraw::drawImpl(GLuint texture, float rotation,
     case 3:
         indexShift = 6 * kIndicesPerDraw;
         break;
+    case 4:
+        indexShift = 8 * kIndicesPerDraw;
+        break;
     }
-
     s_gles2.glDrawElements(GL_TRIANGLES, kIndicesPerDraw, GL_UNSIGNED_BYTE,
                            (const GLvoid*)indexShift);
 

@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) Huawei Technologies Co., Ltd. 2017-2019. All rights reserved.
  * Description:  OpengGL ES draw yuv video
  */
 #ifndef YUV_DRAW_H

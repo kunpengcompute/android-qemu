@@ -310,7 +310,7 @@ intptr_t RenderThread::main() {
         snprintf(fname, bsize, "%s" PATH_SEP "stream_%p", dump_dir, this);
         dumpFP = android_fopen(fname, "wb");
         if (!dumpFP) {
-            fprintf(stderr, "Warning: stream dump failed to open file %s\n",
+            ERR("Warning: stream dump failed to open file %s\n",
                     fname);
         }
         delete[] fname;
@@ -480,8 +480,7 @@ intptr_t RenderThread::main() {
         // Release references to the current thread's context/surfaces if any
         FrameBuffer::getFB()->bindContext(0, 0, 0);
         if (tInfo.currContext || tInfo.currDrawSurf || tInfo.currReadSurf) {
-            fprintf(stderr,
-                    "ERROR: RenderThread exiting with current context/surfaces\n");
+            ERR("ERROR: RenderThread exiting with current context/surfaces\n");
         }
 
         FrameBuffer::getFB()->drainWindowSurface();

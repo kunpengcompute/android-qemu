@@ -45,7 +45,7 @@
 
 #if HOST_PIPE_DEBUG
 
-#define HOST_PIPE_DLOG(fmt,...) fprintf(stderr, "%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
+#define HOST_PIPE_DLOG(fmt,...) ERR("%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
 
 #else
 

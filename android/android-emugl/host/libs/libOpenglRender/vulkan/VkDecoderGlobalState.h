@@ -90,7 +90,7 @@ public:
         android::base::Pool* pool,
         const VkInstanceCreateInfo* pCreateInfo,
         const VkAllocationCallbacks* pAllocator,
-        VkInstance* pInstance);
+        VkInstance* pBoxedInstance);
 
     void on_vkDestroyInstance(
         android::base::Pool* pool,
@@ -101,7 +101,7 @@ public:
         android::base::Pool* pool,
         VkInstance instance,
         uint32_t* physicalDeviceCount,
-        VkPhysicalDevice* physicalDevices);
+        VkPhysicalDevice* boxedPhysicalDevices);
 
     // Override features
     void on_vkGetPhysicalDeviceFeatures(
@@ -742,19 +742,19 @@ public:
 #define DEFINE_TRANSFORMED_TYPE_PROTOTYPE(type) \
     void transformImpl_##type##_tohost(const type*, uint32_t); \
     void transformImpl_##type##_fromhost(const type*, uint32_t); \
-    
+
 LIST_TRANSFORMED_TYPES(DEFINE_TRANSFORMED_TYPE_PROTOTYPE)
 
     // boxed handles
 #define DEFINE_BOXED_DISPATCHABLE_HANDLE_API_DECL(type) \
-    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch); \
+    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch, type boxed = VK_NULL_HANDLE); \
     void delete_boxed_##type(type boxed); \
     type unbox_##type(type boxed); \
     type unboxed_to_boxed_##type(type boxed); \
     VulkanDispatch* dispatch_##type(type boxed); \
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_API_DECL(type) \
-    type new_boxed_non_dispatchable_##type(type underlying); \
+    type new_boxed_non_dispatchable_##type(type underlying, type boxed = VK_NULL_HANDLE); \
     void delete_boxed_non_dispatchable_##type(type boxed); \
     type unbox_non_dispatchable_##type(type boxed); \
     type unboxed_to_boxed_non_dispatchable_##type(type boxed); \
@@ -775,7 +775,7 @@ private:
 GOLDFISH_VK_LIST_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_DISPATCHABLE_HANDLE_GLOBAL_API_DECL)
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_GLOBAL_API_DECL(type) \
-    type new_boxed_non_dispatchable_##type(type underlying); \
+    type new_boxed_non_dispatchable_##type(type underlying, type boxed = VK_NULL_HANDLE); \
     void delete_boxed_non_dispatchable_##type(type boxed); \
     type unbox_non_dispatchable_##type(type boxed); \
     type unboxed_to_boxed_non_dispatchable_##type(type boxed); \
@@ -801,15 +801,15 @@ GOLDFISH_VK_LIST_NON_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_NON_DISPATCHABLE_HAN
 
 #define BOXED_DISPATCHABLE_UNWRAP_IMPL(type_name) \
     MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_##type_name(handles[i]); } else { handles[i] = nullptr; } ;, \
+        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_##type_name(handles[i]); } else { handles[i] = (type_name)nullptr; } ;, \
         if (handles[i]) { handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unbox_##type_name(handles[i]); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = nullptr; })
+        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = (type_name)nullptr; })
 
 #define BOXED_NON_DISPATCHABLE_UNWRAP_IMPL(type_name) \
     MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); } else { handles[i] = nullptr; } ;, \
+        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); } else { handles[i] = (type_name)nullptr; } ;, \
         if (handles[i]) { handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = nullptr; })
+        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = (type_name)nullptr; })
 
 class BoxedHandleUnwrapMapping : public VulkanHandleMapping {
 public:
@@ -820,15 +820,15 @@ public:
 
 #define BOXED_DISPATCHABLE_WRAP_IMPL(type_name) \
     MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_##type_name(handles[i]); } else { handles[i] = nullptr; } ;, \
+        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_##type_name(handles[i]); } else { handles[i] = (type_name)nullptr; } ;, \
         if (handles[i]) { handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unboxed_to_boxed_##type_name(handles[i]); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = nullptr; })
+        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = (type_name)nullptr; })
 
 #define BOXED_NON_DISPATCHABLE_WRAP_IMPL(type_name) \
     MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_non_dispatchable_##type_name(handles[i]); } else { handles[i] = nullptr; } ;, \
+        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_non_dispatchable_##type_name(handles[i]); } else { handles[i] = (type_name)nullptr; } ;, \
         if (handles[i]) { handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unboxed_to_boxed_non_dispatchable_##type_name(handles[i]); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = nullptr; })
+        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unboxed_to_boxed_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = (type_name)nullptr; })
 
 class BoxedHandleWrapMapping : public VulkanHandleMapping {
 public:
@@ -864,17 +864,11 @@ public:
         (void)handle_u64s[i]; delete_boxed_non_dispatchable_##type_name(handles[i]), \
         (void)handles[i]; delete_boxed_non_dispatchable_##type_name((type_name)handle_u64s[i]))
 
-#define BOXED_NON_DISPATCHABLE_UNWRAP_IMPL(type_name) \
-    MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); } else { handles[i] = nullptr; } ;, \
-        if (handles[i]) { handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); } else { handles[i] = nullptr; })
-
 #define BOXED_NON_DISPATCHABLE_UNWRAP_AND_DELETE_IMPL(type_name) \
     MAKE_HANDLE_MAPPING_FOREACH(type_name, \
-        if (handles[i]) { auto boxed = handles[i]; handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); delete_boxed_non_dispatchable_##type_name(boxed); } else { handles[i] = nullptr; } ;, \
+        if (handles[i]) { auto boxed = handles[i]; handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); delete_boxed_non_dispatchable_##type_name(boxed); } else { handles[i] = (type_name)nullptr; } ;, \
         if (handles[i]) { auto boxed = handles[i]; handle_u64s[i] = (uint64_t)VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name(handles[i]); delete_boxed_non_dispatchable_##type_name(boxed); } else { handle_u64s[i] = 0; }, \
-        if (handle_u64s[i]) { auto boxed = (type_name)(uintptr_t)handle_u64s[i]; handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); delete_boxed_non_dispatchable_##type_name(boxed); } else { handles[i] = nullptr; })
+        if (handle_u64s[i]) { auto boxed = (type_name)(uintptr_t)handle_u64s[i]; handles[i] = VkDecoderGlobalState::get()->unbox_non_dispatchable_##type_name((type_name)(uintptr_t)handle_u64s[i]); delete_boxed_non_dispatchable_##type_name(boxed); } else { handles[i] = (type_name)nullptr; })
 
 class BoxedHandleCreateMapping : public VulkanHandleMapping {
 public:

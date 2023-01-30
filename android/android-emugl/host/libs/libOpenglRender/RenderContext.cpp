@@ -76,7 +76,7 @@ RenderContext* RenderContext::createImpl(EGLDisplay display,
             display, config, sharedContext, &contextAttribs[0]);
     }
     if (context == EGL_NO_CONTEXT) {
-        fprintf(stderr, "%s: failed to create context (EGL_NO_CONTEXT result)\n", __func__);
+        ERR("%s: failed to create context (EGL_NO_CONTEXT result)\n", __func__);
         return NULL;
     }
 

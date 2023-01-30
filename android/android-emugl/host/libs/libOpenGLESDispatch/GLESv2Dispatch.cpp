@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "emugl/common/shared_library.h"
+#include "emugl/common/logging.h"
 
 static emugl::SharedLibrary *s_gles2_lib = NULL;
 
@@ -33,7 +34,7 @@ static emugl::SharedLibrary *s_gles2_lib = NULL;
 // the driver should be redirected to this function.
 
 void gles2_unimplemented() {
-    fprintf(stderr, "Called unimplemented GLES API\n");
+    ERR("Called unimplemented GLES API\n");
 }
 
 #define LOOKUP_SYMBOL_STATIC(return_type,function_name,signature,callargs) \
@@ -47,21 +48,37 @@ bool gles2_dispatch_init(GLESv2Dispatch* dispatch_table) {
     if (dispatch_table->initialized) return true;
     const char *libName = getenv("ANDROID_GLESv2_LIB");
     if (!libName) {
+#ifdef __ANDROID__
 #if defined(__LP64__)
         libName = "/system/lib64/libGLESv2.so";
 #else
         libName = "/system/lib/libGLESv2.so";
 #endif
+#else // __ANDROID__
+#ifdef __x86_64__
+#if defined(__LP64__)
+        libName = "/usr/lib64/libGLESv2.so";
+#else
+        libName = "/usr/lib/libGLESv2.so";
+#endif
+#else // __x86_64__
+#if defined(__LP64__)
+        libName = "/usr/lib/aarch64-linux-gnu/libGLESv2.so";
+#else
+        libName = "/usr/lib/aarch64-linux-gnu/libGLESv2.so";
+#endif
+#endif // __x86_64__
+#endif // __ANDROID__
     }
     char error[256];
     s_gles2_lib = emugl::SharedLibrary::open(libName, error, sizeof(error));
     if (!s_gles2_lib) {
-        fprintf(stderr, "%s: Could not load %s [%s]\n", __FUNCTION__,
+        ERR("%s: Could not load %s [%s]\n", __FUNCTION__,
                 libName, error);
         return false;
     }
     LIST_GLES2_FUNCTIONS(LOOKUP_SYMBOL_STATIC,LOOKUP_SYMBOL_STATIC)
-   
+
     dispatch_table->initialized = true;
     return true;
 }
@@ -85,6 +102,7 @@ void *gles2_dispatch_get_proc_func(const char *name, void *userData)
     // To make it consistent with the guest, redirect any unsupported functions
     // to gles2_unimplemented.
     if (!func) {
+        WARN("GLES Function %s load failed.\n", name);
         func = (void *)gles2_unimplemented;
     }
     return func;

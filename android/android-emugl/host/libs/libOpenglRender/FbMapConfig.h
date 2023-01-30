@@ -35,6 +35,14 @@
 // One doesn't create an FbConfig instance. Instead, create and initialize
 // an FbConfigList from the host EGLDisplay, and use its size() and get()
 // methods to access it.
+enum class ClientGPUType : int {
+    PHONE = 0,
+    AMD_5100_KBOX,
+    AMD_5100_DESKTOP,
+    NVIDIA_QUADRO_5000,
+    NVIDIA_TESLA_T4
+};
+
 class FbConfig {
 public:
     // Destructor
@@ -104,7 +112,7 @@ public:
     //
     // After construction, call empty() to check if there are items.
     // An empty list means there was an error during construction.
-    explicit FbConfigList(EGLDisplay display, bool isBasePhone);
+    FbConfigList(EGLDisplay display, ClientGPUType clientgpu);
 
     // Destructor.
     ~FbConfigList();
@@ -148,10 +156,7 @@ public:
                         EGLint configsSize,
                         bool isFramebufferDepth24) const;
 
-    bool chooseConfig(const EGLint* hostAttribs, EGLint* clientConfig) const;
-
-    bool MatchBestConfig(const EGLint* hostAttribs, EGLConfig* candidateConfig,
-    EGLint candidateNum, EGLint* clientConfig, bool isPrint = false) const;
+    bool chooseConfig(const EGLint* hostAttribs, EGLint* clientConfig);
 
     bool MatchAllConfig();
 
@@ -172,12 +177,15 @@ public:
 private:
     FbConfigList();
     FbConfigList(const FbConfigList& other) = delete;
+    bool isIgnoreAttrib(GLuint attribName, GLuint hostAttribValue);
+    bool needContainType(GLuint attribName);
+    bool mustMatchType(bool& matched, GLuint attribName, GLuint clientAttribValue, GLuint hostAttribValue);
     std::vector<EGLint> serverMatchConfigId;
     int mCount = 0;
     int mAllConfigCount = 0;
     FbConfig** mConfigs = nullptr;
     EGLDisplay mDisplay = 0;
-    bool mIsBasePhone = false;
+    ClientGPUType mClientgpu = ClientGPUType::PHONE;
 };
 
 #endif  // _LIBRENDER_FB_CONFIG_H

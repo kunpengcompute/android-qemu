@@ -21,10 +21,13 @@
 #include "WindowSurface.h"
 #include "GLESv2Decoder.h"
 #include "renderControl_dec.h"
+#include "VkDecoder.h"
 #include "StalePtrRegistry.h"
 #include "SyncThread.h"
+#include "ColorBuffer.h"
 
 #include <unordered_set>
+#include <deque>
 
 typedef uint32_t HandleType;
 typedef std::unordered_set<HandleType> ThreadContextSet;
@@ -53,6 +56,7 @@ struct RenderThreadInfo {
 #ifndef __ANDROID__
     renderControl_decoder_context_t m_rcDec;
 #endif
+	VkDecoder                       m_vkDec;
 	uint32_t m_pid;
     uint32_t m_tid;
 
@@ -66,7 +70,12 @@ struct RenderThreadInfo {
 
     // The unique id of owner guest process of this render thread
     uint64_t                        m_puid = 0;
-	std::string procName = {}; // serverside process which this render thread belongs to
+    std::string procName = {}; // serverside process which this render thread belongs to
+    bool m_isNeedChange = false;
+    bool m_isSurfaceFlinger = false;
+    bool m_isFlushIng = false;
+    std::deque<ColorBufferPtr> m_colorbuffers;
+    EGLImageKHR m_curBindImages = EGL_NO_IMAGE_KHR;
     // Functions to save / load a snapshot
     // They must be called after Framebuffer snapshot
     void onSave(android::base::Stream* stream);

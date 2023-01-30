@@ -18,12 +18,13 @@
 
 #include "DispatchTables.h"
 #include "emugl/common/feature_control.h"
+#include "emugl/common/logging.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
 
 #define FATAL(fmt,...) do { \
-    fprintf(stderr, "%s: FATAL: " fmt "\n", __func__, ##__VA_ARGS__); \
+    ERR("%s: FATAL: " fmt "\n", __func__, ##__VA_ARGS__); \
     assert(false); \
 } while(0)
 
@@ -31,7 +32,7 @@
 
 #if YUV_CONVERTER_DEBUG
 #define DDD(fmt, ...)                                                     \
-    fprintf(stderr, "yuv-converter: %s:%d " fmt "\n", __func__, __LINE__, \
+    DBG("yuv-converter: %s:%d " fmt "\n", __func__, __LINE__, \
             ##__VA_ARGS__);
 #else
 #define DDD(fmt, ...)

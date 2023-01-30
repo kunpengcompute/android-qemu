@@ -38,12 +38,12 @@ using android::base::System;
 #define DEBUG 0
 
 #if DEBUG
-#define D(fmt,...) fprintf(stderr, "%s: " fmt "\n", __func__, ##__VA_ARGS__);
+#define D(fmt,...) DBG("%s: " fmt "\n", __func__, ##__VA_ARGS__);
 #else
 #define D(fmt,...)
 #endif
 
-#define E(fmt,...) fprintf(stderr, "%s: " fmt "\n", __func__, ##__VA_ARGS__);
+#define E(fmt,...) ERR("%s: " fmt "\n", __func__, ##__VA_ARGS__);
 
 namespace emugl {
 
@@ -114,7 +114,7 @@ static Optional<std::string> getSpirvCompilerPath() {
     auto launcherDirRelativePath =
         pj(System::get()->getLauncherDirectory(),
            "lib64", "vulkan", programName);
-    
+
     if (path_exists(launcherDirRelativePath.c_str())) {
         return launcherDirRelativePath;
     }
@@ -126,7 +126,7 @@ static Optional<std::string> getSpirvCompilerPath() {
 Optional<std::string> compileSpirvFromGLSL(const std::string& shaderType,
                                            const std::string& src) {
     auto spvCompilerPath = getSpirvCompilerPath();
-    
+
     if (!spvCompilerPath) return {};
 
     const auto glslFile = android::base::makeCustomScopedPtr(

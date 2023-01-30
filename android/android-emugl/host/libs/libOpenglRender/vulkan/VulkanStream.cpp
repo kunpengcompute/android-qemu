@@ -18,12 +18,13 @@
 #include "android/base/Pool.h"
 
 #include "emugl/common/feature_control.h"
+#include "emugl/common/logging.h"
 
 #include <vector>
 
 #include <inttypes.h>
 
-#define E(fmt,...) fprintf(stderr, fmt "\n", ##__VA_ARGS__)
+#define E(fmt,...) ERR(fmt "\n", ##__VA_ARGS__)
 
 using emugl::emugl_feature_is_enabled;
 
@@ -36,11 +37,15 @@ public:
 
         unsetHandleMapping();
 
-        if (emugl_feature_is_enabled(android::featurecontrol::VulkanNullOptionalStrings)) {
+        if (true /* emugl_feature_is_enabled(android::featurecontrol::VulkanNullOptionalStrings) */) {
             mFeatureBits |= VULKAN_STREAM_FEATURE_NULL_OPTIONAL_STRINGS_BIT;
         }
-        if (emugl_feature_is_enabled(android::featurecontrol::VulkanIgnoredHandles)) {
+        if (true /* emugl_feature_is_enabled(android::featurecontrol::VulkanIgnoredHandles) */) {
             mFeatureBits |= VULKAN_STREAM_FEATURE_IGNORED_HANDLES_BIT;
+        }
+
+        if (true /* emugl_feature_is_enabled(android::featurecontrol::VulkanShaderFloat16Int8) */) {
+            mFeatureBits |= VULKAN_STREAM_FEATURE_SHADER_FLOAT16_INT8_BIT;
         }
     }
 
@@ -68,7 +73,7 @@ public:
     ssize_t read(void *buffer, size_t size) override {
         commitWrite();
         if (!mStream->readFully(buffer, size)) {
-            E("FATAL: Could not read back %zu bytes", size);
+            ERR("FATAL: Could not read back %zu bytes", size);
             abort();
         }
         return size;
@@ -109,15 +114,19 @@ private:
 
     void commitWrite() {
         if (!valid()) {
-            E("FATAL: Tried to commit write to vulkan pipe with invalid pipe!");
+            ERR("FATAL: Tried to commit write to vulkan pipe with invalid pipe!");
             abort();
+        }
+
+        if ((mWriteBuffer.data() == nullptr) || (mWritePos == 0)) {
+            return;
         }
 
         int written =
             mStream->writeFully(mWriteBuffer.data(), mWritePos);
 
-        if (written) {
-            E("FATAL: Did not write exactly %zu bytes!", mWritePos);
+        if (written != mWritePos) {
+            ERR("FATAL: Did not write exactly %zu bytes!", mWritePos);
             abort();
         }
         mWritePos = 0;
@@ -242,8 +251,7 @@ ssize_t VulkanMemReadingStream::read(void* buffer, size_t size) {
 }
 
 ssize_t VulkanMemReadingStream::write(const void* buffer, size_t size) {
-    fprintf(stderr,
-            "%s: FATAL: VulkanMemReadingStream does not support writing\n",
+    ERR("%s: FATAL: VulkanMemReadingStream does not support writing\n",
             __func__);
     abort();
 }

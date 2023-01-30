@@ -25,6 +25,8 @@
 #include "SyncThread.h"
 #include "ChecksumCalculatorThreadInfo.h"
 #include "OpenGLESDispatch/EGLDispatch.h"
+#include "vulkan/VkCommonOperations.h"
+#include "vulkan/VkDecoderGlobalState.h"
 
 #include "android/utils/debug.h"
 #include "android/base/StringView.h"
@@ -43,7 +45,9 @@
 
 using android::base::AutoLock;
 using android::base::Lock;
+using emugl::emugl_feature_is_enabled;
 using emugl::emugl_sync_device_exists;
+using emugl::emugl_sync_register_trigger_wait;
 
 #define DEBUG_GRALLOC_SYNC 0
 #define DEBUG_EGL_SYNC 0
@@ -261,28 +265,63 @@ EGLint rcQueryEGLString(EGLenum name, void* buffer, EGLint bufferSize)
 }
 
 bool shouldEnableAsyncSwap() {
-    return false;
+    bool isPhone;
+    emugl::getAvdInfo(&isPhone, NULL);
+    bool playStoreImage = emugl::emugl_feature_is_enabled(
+            android::featurecontrol::PlayStoreImage);
+
+    return emugl_feature_is_enabled(android::featurecontrol::GLAsyncSwap) &&
+           emugl_sync_device_exists() && (isPhone || playStoreImage) &&
+           sizeof(void*) == 8;
 }
 
 bool shouldEnableVirtioGpuNativeSync() {
-    return false;
+    return emugl_feature_is_enabled(android::featurecontrol::VirtioGpuNativeSync);
 }
 
 bool shouldEnableHostComposition() {
-    return false;
+    return emugl_feature_is_enabled(android::featurecontrol::HostComposition);
 }
 
 bool shouldEnableVulkan() {
+    auto supportInfo =
+        goldfish_vk::VkDecoderGlobalState::get()->
+            getHostFeatureSupport();
+    bool flagEnabled =
+        emugl_feature_is_enabled(android::featurecontrol::Vulkan);
     // TODO: Restrict further to devices supporting external memory.
-    return false;
+    return supportInfo.supportsVulkan &&
+           flagEnabled;
 }
 
 bool shouldEnableDeferredVulkanCommands() {
-    return false;
+    auto supportInfo =
+        goldfish_vk::VkDecoderGlobalState::get()->
+            getHostFeatureSupport();
+    return supportInfo.supportsVulkan &&
+           supportInfo.useDeferredCommands;
 }
 
 bool shouldEnableCreateResourcesWithRequirements() {
+    auto supportInfo =
+        goldfish_vk::VkDecoderGlobalState::get()->
+            getHostFeatureSupport();
+    return supportInfo.supportsVulkan &&
+           supportInfo.useCreateResourcesWithRequirements;
+}
 
+android::base::StringView maxVersionToFeatureString(GLESDispatchMaxVersion version) {
+    switch (version) {
+        case GLES_DISPATCH_MAX_VERSION_2:
+            return kGLESDynamicVersion_2;
+        case GLES_DISPATCH_MAX_VERSION_3_0:
+            return kGLESDynamicVersion_3_0;
+        case GLES_DISPATCH_MAX_VERSION_3_1:
+            return kGLESDynamicVersion_3_1;
+        default:
+            return kGLESDynamicVersion_2;
+}
+}
 
 // OpenGL ES 3.x support involves changing the GL_VERSION string, which is
 // assumed to be formatted in the following way:
@@ -294,17 +333,33 @@ bool shouldEnableCreateResourcesWithRequirements() {
 // version string in the first place since the underlying backend (whether it
 // is Translator, SwiftShader, ANGLE, et al) may not advertise a GL_VERSION
 // string reflecting their maximum capabilities.
+std::string replaceESVersionString(const std::string& prev,
+                                   android::base::StringView newver) {
 
     // There is no need to fiddle with the string
     // if we are in a ES 1.x context.
     // Such contexts are considered as a special case that must
     // be untouched.
+    if (prev.find("ES-CM") != std::string::npos) {
+        return prev;
+    }
 
+    size_t esStart = prev.find("ES ");
+    size_t esEnd = prev.find(" ", esStart + 3);
 
+    if (esStart == std::string::npos ||
+        esEnd == std::string::npos) {
         // Account for out-of-spec version strings.
+        ERR("%s: Error: invalid OpenGL ES version string %s\n",
+            __func__, prev.c_str());
+        return prev;
+    }
 
+    std::string res = prev.substr(0, esStart + 3);
+    res += newver;
+    res += prev.substr(esEnd);
 
-    return false;
+    return res;
 }
 
 // If the GLES3 feature is disabled, we also want to splice out
@@ -331,7 +386,7 @@ EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
             str = (const char *)s_gles2.glGetString(name);
         }
         else {
-            fprintf(stderr, "not support gles 1.0");
+            ERR("not support gles 1.0");
         }
         if (str) {
             glStr += str;
@@ -357,16 +412,18 @@ EGLint rcGetGLString(EGLenum name, void* buffer, EGLint bufferSize) {
     bool deferredVulkanCommandsEnabled =
         shouldEnableVulkan() && shouldEnableDeferredVulkanCommands();
     bool vulkanNullOptionalStringsEnabled =
-        shouldEnableVulkan() && false;
+        shouldEnableVulkan() && emugl_feature_is_enabled(android::featurecontrol::VulkanNullOptionalStrings);
     bool vulkanCreateResourceWithRequirementsEnabled =
         shouldEnableVulkan() && shouldEnableCreateResourcesWithRequirements();
     bool YUV420888toNV21Enabled = false;
     bool YUVCacheEnabled = false;
     bool AsyncUnmapBufferEnabled = true;
     bool vulkanIgnoredHandlesEnabled =
-        shouldEnableVulkan() && false;
-    bool virtioGpuNextEnabled = false;
-    bool hasSharedSlotsHostMemoryAllocatorEnabled = false;
+        shouldEnableVulkan() && emugl_feature_is_enabled(android::featurecontrol::VulkanIgnoredHandles);
+    bool virtioGpuNextEnabled =
+        emugl_feature_is_enabled(android::featurecontrol::VirtioGpuNext);
+    bool hasSharedSlotsHostMemoryAllocatorEnabled =
+        emugl_feature_is_enabled(android::featurecontrol::HasSharedSlotsHostMemoryAllocator);
     bool vulkanFreeMemorySyncEnabled =
         shouldEnableVulkan();
 
@@ -597,6 +654,7 @@ uint32_t rcCreateContext(uint32_t config,
         return 0;
     }
     uint32_t clientConfigId = fb->getMatchConfigs(config);
+    INFO("Create context, config server[%d]-client[%d]", config, clientConfigId);
     HandleType ret = fb->createRenderContext(clientConfigId, share, (GLESApi)glVersion);
     return ret;
 }
@@ -621,6 +679,7 @@ uint32_t rcCreateWindowSurface(uint32_t config,
         return 0;
     }
     uint32_t clientConfigId = fb->getMatchConfigs(config);
+    INFO("Create window, config server[%d]-client[%d]", config, clientConfigId);
     return fb->createWindowSurface(clientConfigId, width, height);
 }
 
@@ -690,9 +749,6 @@ void rcCloseColorBuffer(uint32_t colorbuffer)
 int rcFlushWindowColorBuffer(uint32_t windowSurface)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
-    GRSYNC_DPRINT("waiting for gralloc cb lock");
-    GrallocSyncPostLock lock(sGrallocSync.get());
-    GRSYNC_DPRINT("lock gralloc cb lock {");
 
     FrameBuffer *fb = FrameBuffer::getFB();
     if (!fb) {
@@ -700,13 +756,18 @@ int rcFlushWindowColorBuffer(uint32_t windowSurface)
         return -1;
     }
 
+    // Update from Vulkan if necessary
+    goldfish_vk::updateColorBufferFromVkImage(
+        fb->getWindowSurfaceColorBufferHandle(windowSurface));
 
     if (!fb->flushWindowSurfaceColorBuffer(windowSurface, nullptr, 0)) {
         GRSYNC_DPRINT("unlock gralloc cb lock }");
         return -1;
     }
 
-    GRSYNC_DPRINT("unlock gralloc cb lock }");
+    // Update to Vulkan if necessary
+    goldfish_vk::updateVkImageFromColorBuffer(
+        fb->getWindowSurfaceColorBufferHandle(windowSurface));
 
     return 0;
 }
@@ -773,6 +834,10 @@ void rcFBPost(uint32_t colorBuffer)
     if (!fb) {
         return;
     }
+
+    // Update from Vulkan if necessary
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
+
     fb->post(colorBuffer);
 }
 
@@ -789,6 +854,8 @@ void rcBindTexture(uint32_t colorBuffer)
         return;
     }
     // Update from Vulkan if necessary
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
+
     fb->bindColorBufferToTexture(colorBuffer);
 }
 
@@ -799,6 +866,9 @@ void rcBindRenderbuffer(uint32_t colorBuffer)
     if (!fb) {
         return;
     }
+
+    // Update from Vulkan if necessary
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
 
     fb->bindColorBufferToRenderbuffer(colorBuffer);
 }
@@ -825,6 +895,9 @@ void rcReadColorBuffer(uint32_t colorBuffer,
         return;
     }
 
+    // Update from Vulkan if necessary
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
+
     fb->readColorBuffer(colorBuffer, x, y, width, height, format, type, pixels);
 }
 
@@ -842,12 +915,17 @@ int rcUpdateColorBuffer(uint32_t colorBuffer,
         return -1;
     }
 
+    // Since this is a modify operation, also read the current contents
+    // of the VkImage, if any.
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
 
     fb->updateColorBuffer(colorBuffer, x, y, width, height, format, type, pixels);
 
     GRSYNC_DPRINT("unlock gralloc cb lock");
     sGrallocSync->unlockColorBufferPrepare();
 
+    // Update to Vulkan if necessary
+    goldfish_vk::updateVkImageFromColorBuffer(colorBuffer);
 
     return 0;
 }
@@ -867,12 +945,18 @@ int rcUpdateColorBufferDMA(uint32_t colorBuffer,
         return -1;
     }
 
+    // Since this is a modify operation, also read the current contents
+    // of the VkImage, if any.
+    goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
+
     fb->updateColorBuffer(colorBuffer, x, y, width, height,
                           format, type, pixels);
 
     GRSYNC_DPRINT("unlock gralloc cb lock");
     sGrallocSync->unlockColorBufferPrepare();
 
+    // Update to Vulkan if necessary
+    goldfish_vk::updateVkImageFromColorBuffer(colorBuffer);
 
     return 0;
 }
@@ -1130,7 +1214,29 @@ int rcSetDisplayPose(uint32_t displayId,
     return fb->setDisplayPose(displayId, x, y, w, h);
 }
 
-int rcSetColorBufferVulkanMode(uint32_t colorBuffer, uint32_t mode) {
+static int rcSetColorBufferVulkanMode(uint32_t colorBuffer, uint32_t mode) {
+    if (!goldfish_vk::isColorBufferVulkanCompatible(colorBuffer)) {
+        ERR("%s: error: colorBuffer 0x%x is not Vulkan compatible\n",
+            __func__, colorBuffer);
+        return -1;
+    }
+
+#define VULKAN_MODE_VULKAN_ONLY 1
+
+    bool modeIsVulkanOnly = mode == VULKAN_MODE_VULKAN_ONLY;
+
+    if (!goldfish_vk::setupVkColorBuffer(colorBuffer, modeIsVulkanOnly)) {
+        ERR("%s: error: failed to create VkImage for colorBuffer 0x%x\n",
+            __func__, colorBuffer);
+        return -1;
+    }
+
+    if (!goldfish_vk::setColorBufferVulkanMode(colorBuffer, mode)) {
+        ERR("%s: error: failed to set Vulkan mode for colorBuffer 0x%x\n",
+            __func__, colorBuffer);
+        return -1;
+    }
+
     return 0;
 }
 
@@ -1172,7 +1278,7 @@ void rcCreateColorBufferWithHandle(
 void rcPushProcessName(const char* procName, uint32_t processNameSize)
 {
     if (procName == nullptr || processNameSize <= 0) {
-        fprintf(stderr, "proceess name is null, size is %u", processNameSize);
+        ERR("proceess name is null, size is %u", processNameSize);
     }
     FrameBuffer::getFB()->SetProcNameOfThread(procName, processNameSize);
 }
@@ -1193,7 +1299,7 @@ bool rcUpdateYuv(uint32_t colorBuffer,
 #ifdef __cplusplus
 }
 #endif
-#ifndef __ANDROID__ 
+#ifndef VMICLIENT
 void initRenderControlContext(renderControl_decoder_context_t *dec)
 {
     dec->rcGetRendererVersion = rcGetRendererVersion;

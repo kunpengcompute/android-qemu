@@ -17,7 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sstream>
-#include <iomanip> 
+#include <iomanip>
 #include "FrameBuffer.h"
 #include "GLESVersionDetector.h"
 #include "emugl/common/misc.h"
@@ -85,6 +85,7 @@ bool isCompatibleHostConfig(EGLConfig config, EGLDisplay display) {
     s_egl.eglGetConfigAttrib(
             display, config, EGL_SURFACE_TYPE, &surfaceType);
     if (!(surfaceType & EGL_PBUFFER_BIT)) {
+        DBG("Surface Type: %#x does not support pbuffer", surfaceType);
         return false;
     }
 
@@ -119,7 +120,7 @@ FbConfig::FbConfig(EGLConfig hostConfig, EGLDisplay hostDisplay) :
                                  hostConfig,
                                  kConfigAttributes[i],
                                  &mAttribValues[i]);
-
+        DBG("index:%zu, kConfigAttributes[%x] mAttribValues[%d]", i, kConfigAttributes[i], mAttribValues[i]);
         // This implementation supports guest window surfaces by wrapping
         // them around host Pbuffers, so always report it to the guest.
         if (kConfigAttributes[i] == EGL_SURFACE_TYPE) {
@@ -138,8 +139,8 @@ std::ostream& operator<<(std::ostream& out, const FbConfig& config)
     return out;
 }
 
-FbConfigList::FbConfigList(EGLDisplay display, bool isBasePhone) :
-        mCount(0), mConfigs(nullptr), mDisplay(display), mIsBasePhone(isBasePhone) {
+FbConfigList::FbConfigList(EGLDisplay display, ClientGPUType clientgpu) :
+        mCount(0), mConfigs(nullptr), mDisplay(display), mClientgpu(clientgpu) {
     if (display == EGL_NO_DISPLAY) {
         ERR("%s: Invalid display value %p (EGL_NO_DISPLAY)\n",
           __FUNCTION__, (void*)display);
@@ -155,13 +156,13 @@ FbConfigList::FbConfigList(EGLDisplay display, bool isBasePhone) :
     s_egl.eglGetConfigs(display, hostConfigs, numHostConfigs, &numHostConfigs);
     mAllConfigCount = numHostConfigs;
     mConfigs = new FbConfig*[numHostConfigs];
-    INFO("numHostConfigs  %d", numHostConfigs);
+    DBG("numHostConfigs  %d", numHostConfigs);
     for (EGLint i = 0;  i < numHostConfigs; ++i) {
         // Filter out configs that are not compatible with our implementation.
         if (!isCompatibleHostConfig(hostConfigs[i], display)) {
             continue;
         }
-        INFO("config[%d]:%p", mCount, hostConfigs[i]);
+        DBG("config[%d]:%p", mCount, hostConfigs[i]);
         mConfigs[mCount] = new FbConfig(hostConfigs[i], display);
         mCount++;
     }
@@ -230,89 +231,19 @@ EGLint FbConfigList::getMatchConfigs(EGLint hostConfig) const
     return serverMatchConfigId[hostConfig];
 }
 
-bool FbConfigList::MatchBestConfig(const EGLint* hostAttribs, EGLConfig* candidateConfig,
-    EGLint candidateNum, EGLint* clientConfig, bool isPrint) const
+bool FbConfigList::isIgnoreAttrib(GLuint attribName, GLuint hostAttribValue)
 {
-    for (EGLint i = 0; i < candidateNum; i++) {
-        if (!isCompatibleHostConfig(candidateConfig[i], mDisplay)) {
-            if (isPrint) {
-                EGLint configId = 0;
-                s_egl.eglGetConfigAttrib(mDisplay, candidateConfig[i], EGL_CONFIG_ID, &configId);
-                ERR("config:%d is not compatible", configId);
-            }
-            continue;
-        }
-        int index = 0;
-        const FbConfig* config = get(candidateConfig[i], index);
-        if (config == nullptr) {
-            ERR("can't clientconfig:%d", config->getConfigId());
-            continue;
-        }
-        if (isPrint) {
-            std::stringstream ss;
-            ss << *config;
-            ERR("%s", ss.str().c_str());
-        }
-        bool isFind = true;
-        for (size_t i = 0; i < kConfigAttributesLen; i++) {
-            GLuint attriName = kConfigAttributes[i];
-            if (mIsBasePhone && attriName == EGL_SAMPLES) {
-                // 基础云手机当前，samples大于0时，rendertype就不支持pbuffer
-                // 所以在基础云手机上,EGL_SAMPLES不作为强匹配
-                continue;
-            }
-            if (attriName != EGL_ALPHA_SIZE && attriName != EGL_BLUE_SIZE &&
-                attriName != EGL_GREEN_SIZE && attriName != EGL_RED_SIZE &&
-                attriName != EGL_DEPTH_SIZE && attriName != EGL_STENCIL_SIZE &&
-                attriName != EGL_SAMPLES) {
-                continue;
-            }
-            // 除掉continue的属性都需要强匹配
-            GLuint clientAttriValue = config->getAttribValue(i);
-            GLuint hostAttriValue = hostAttribs[i];
-            if (clientAttriValue != hostAttriValue) {
-                if (isPrint) {
-                    ERR("config:%d attri:%d host:%d, client:%d", config->getConfigId(), attriName,
-                        hostAttriValue, clientAttriValue);
-                }
-                isFind = false;
-                break;
-            }
-        }
-        if (isFind) {
-            *clientConfig = index;
-            return true;
-        }
-    }
-    if (!isPrint) {
-        // 若出现某个config无法匹配客户端的config，则将详细的匹配细节输出
-        const int configIdIndex = 4;
-        ERR("host config:%d unable to match client config, candidateNum:%d", hostAttribs[configIdIndex], candidateNum);
-        (void) MatchBestConfig(hostAttribs, candidateConfig, candidateNum, clientConfig, true);
-    }
-    return false;
-}
-
-bool FbConfigList::chooseConfig(const EGLint* hostAttribs, EGLint* clientConfig) const {
-    if (hostAttribs == nullptr || clientConfig == nullptr || empty()) {
-        return false;
-    }
-    size_t clientConfigNum = getAllConfigCount();
-    EGLConfig* eglConfigs = new (std::nothrow) EGLConfig[clientConfigNum];
-    if (eglConfigs == nullptr) {
-        ERR("Failed to new %zu EGLConfig", clientConfigNum);
-        return false;
-    }
-    std::unique_ptr<EGLConfig []> retClientConfigs(eglConfigs);
-    memset(retClientConfigs.get(), 0, clientConfigNum * sizeof(EGLConfig));
-    EGLint requireAttri[kConfigAttributesLen * 2 + 1] = {EGL_NONE};
-    int curPos = 0;
-    for (size_t i = 0; i < kConfigAttributesLen; i++) {
-        GLuint attriName = kConfigAttributes[i];
-        EGLint hostAttriValue = hostAttribs[i];
-        if (attriName == EGL_MAX_PBUFFER_HEIGHT || attriName == EGL_MAX_PBUFFER_PIXELS || attriName == EGL_MAX_PBUFFER_WIDTH ||
-            attriName == EGL_NATIVE_VISUAL_ID || attriName == EGL_NATIVE_VISUAL_TYPE  || attriName == EGL_RECORDABLE_ANDROID ||
-            attriName == EGL_CONFIG_ID || attriName == EGL_NATIVE_RENDERABLE || attriName == EGL_MAX_SWAP_INTERVAL) {
+    switch (attribName) {
+        case EGL_MAX_PBUFFER_HEIGHT:
+        case EGL_MAX_PBUFFER_PIXELS:
+        case EGL_MAX_PBUFFER_WIDTH:
+        case EGL_NATIVE_VISUAL_ID:
+        case EGL_NATIVE_VISUAL_TYPE:
+        case EGL_RECORDABLE_ANDROID:
+        case EGL_CONFIG_ID:
+        case EGL_NATIVE_RENDERABLE:
+        case EGL_MAX_SWAP_INTERVAL:
+        case EGL_SURFACE_TYPE:  // pbuffer已筛选
             // 以上服务端config的这些属性将忽略，不参与eglChooseConfig的流程
             // 其中：
             // 1.EGL_MAX_PBUFFER_HEIGHT、EGL_MAX_PBUFFER_PIXELS、EGL_MAX_PBUFFER_WIDTH、EGL_NATIVE_VISUAL_ID
@@ -320,38 +251,113 @@ bool FbConfigList::chooseConfig(const EGLint* hostAttribs, EGLint* clientConfig)
             // 2.EGL_CONFIG_ID：此参数在跨手机之间无意义，只是本机的config标识
             // 3.EGL_NATIVE_RENDERABLE：各个真机此参数所有的config都相同，匹配无意义
             // 4.EGL_MAX_SWAP_INTERVAL：此参数各个手机上大部分都是1，但发现华为畅享10e是5，若此参数传入，在畅享10e上将无法匹配，将此参数屏蔽
-            continue;
+            return true;
+        case EGL_SAMPLES:
+        case EGL_SAMPLE_BUFFERS: {
+            // AMD 5100显卡大部分的config都不支持pbuffer（EGL_SURFACE_TYPE对应的属性），但分离渲染的客户端，对应的config必须支持pbuffer
+            // 同时观察到AMD 5100显卡EGL_SAMPLES只能为0且EGL_SAMPLE_BUFFERS也为0的时候，EGL_SURFACE_TYPE才支持pbuffer
+            // 所以在AMD 5100显卡上，让EGL_SAMPLES、EGL_SAMPLE_BUFFERS不参与匹配，防止刷选出来都是不支持pbuffer的
+            // NVIDIA_TESLA_T4 显卡的 EGL_SAMPLES/EGL_SAMPLE_BUFFERS 取值与云手机的定义有区别，不做强匹配
+            return (mClientgpu == ClientGPUType::AMD_5100_KBOX || mClientgpu == ClientGPUType::AMD_5100_DESKTOP ||
+                mClientgpu == ClientGPUType::NVIDIA_QUADRO_5000 || mClientgpu == ClientGPUType::NVIDIA_TESLA_T4);
         }
-        if (mIsBasePhone && (attriName == EGL_SAMPLES || attriName == EGL_SAMPLE_BUFFERS)) {
-            // 基础云手机大部分的config都不支持pbuffer（EGL_SURFACE_TYPE对应的属性），但分离渲染的客户端，对应的config必须支持pbuffer
-            // 同时观察到基础云手机EGL_SAMPLES只能为0且EGL_SAMPLE_BUFFERS也为0的时候，EGL_SURFACE_TYPE才支持pbuffer
-            // 所以在基础云手机上，让EGL_SAMPLES、EGL_SAMPLE_BUFFERS不参与匹配，防止刷选出来都是不支持pbuffer的
-            continue;
-        }
-        if (attriName == EGL_BIND_TO_TEXTURE_RGB && hostAttriValue == 0) {
+        case EGL_BIND_TO_TEXTURE_RGB:
+        case EGL_BIND_TO_TEXTURE_RGBA: {
             // 若服务端config的EGL_BIND_TO_TEXTURE_RGB属性值为0，则不参与匹配，认为服务端无需该功能
             // 做此特殊处理的原因是：基础云手机及华为畅享10e上，若此参数参与eglChooseConfig，而且传0，会导致无法匹配出服务端的config
             // 因为他们的config里面此参数都是大于0
-            continue;
+            // nvidia quadro 5000显卡EGL_BIND_TO_TEXTURE_RGB和EGL_BIND_TO_TEXTURE_RGBA都是0，不参与强匹配
+            return hostAttribValue == 0 || mClientgpu == ClientGPUType::NVIDIA_QUADRO_5000;
         }
-        requireAttri[curPos++] = attriName;
-        requireAttri[curPos++] = hostAttriValue;
+        default:
+            break;
     }
-    requireAttri[curPos] = EGL_NONE;
-    EGLint retNumConfigs = 0;
-    if (!s_egl.eglChooseConfig(mDisplay, requireAttri, retClientConfigs.get(), clientConfigNum, &retNumConfigs)) {
-        ERR("Failed to call eglChooseConfig");
-        return false;
+    return false;
+}
+
+bool FbConfigList::needContainType(GLuint attribName) {
+    switch (attribName) {
+        case EGL_RENDERABLE_TYPE:
+        case EGL_CONFORMANT: {
+            return true;
+        }
+        default:
+            break;
     }
-    if (retNumConfigs == 0) {
-        ERR("eglChooseConfig ret num is zero");
-        return false;
+    return false;
+}
+
+bool FbConfigList::mustMatchType(bool& matched, GLuint attribName, GLuint clientAttribValue, GLuint hostAttribValue) {
+    switch (attribName) {
+        case EGL_BUFFER_SIZE:
+        case EGL_BLUE_SIZE:
+        case EGL_GREEN_SIZE:
+        case EGL_RED_SIZE: {
+            if (mClientgpu == ClientGPUType::AMD_5100_DESKTOP ||
+                mClientgpu == ClientGPUType::NVIDIA_TESLA_T4) {
+                // AMD 5100/NVIDIA TESLA T4 不满足（支持RGB565格式且支持pbuffer），这里只匹配RGB888的config
+                matched = clientAttribValue >= hostAttribValue;
+                return true;
+            }
+            break;
+        }
+        case EGL_DEPTH_SIZE:
+        case EGL_STENCIL_SIZE:
+        case EGL_SAMPLES:
+        case EGL_ALPHA_SIZE:
+            break;
+        default:
+            return false;
     }
-    if (!MatchBestConfig(hostAttribs, retClientConfigs.get(), retNumConfigs, clientConfig)) {
-        ERR("Failed to find best match config, retNum:%d", retNumConfigs);
-        return false;
-    }
+    matched = clientAttribValue == hostAttribValue;
     return true;
+}
+
+bool FbConfigList::chooseConfig(const EGLint* hostAttribs, EGLint* clientConfig) {
+    if (hostAttribs == nullptr || clientConfig == nullptr || empty()) {
+        return false;
+    }
+    bool isFind = true;
+    for (int i = 0; i < mCount; i++) {
+        isFind = true;
+        const FbConfig* config = mConfigs[i];
+        for (int attribIndex = 0; attribIndex < kConfigAttributesLen; attribIndex++) {
+            GLuint attribName =  kConfigAttributes[attribIndex];
+            GLuint clientAttribValue = config->getAttribValue(attribIndex);
+            GLuint hostAttribValue = hostAttribs[attribIndex];
+            if (isIgnoreAttrib(attribName, hostAttribValue)) {
+                continue;
+            }
+            bool matched = false;
+            if(mustMatchType(matched, attribName, clientAttribValue, hostAttribValue)) {
+                if (!matched) {
+                    DBG("index:%d, kConfigAttributes[%#x] host[%d]--client[%d]", i, attribName, hostAttribValue, clientAttribValue);
+                    isFind = false;
+                    break;
+                }
+            } else {
+                if (needContainType(attribName)) {
+                    if (~clientAttribValue & hostAttribValue) {
+                        DBG("index:%d, kConfigAttributes[%#x] host[%d]--client[%d]", i, attribName, hostAttribValue, clientAttribValue);
+                        isFind = false;
+                        break;
+                    }
+                } else {
+                    if (clientAttribValue < hostAttribValue) {
+                        DBG("index:%d, kConfigAttributes[%#x] host[%d]--client[%d]", i, attribName, hostAttribValue, clientAttribValue);
+                        isFind = false;
+                        break;
+                    }
+                }
+            }
+
+        }
+        if (isFind) {
+            *clientConfig = i;
+            return true;
+        }
+    }
+    return false;
 }
 
 int FbConfigList::chooseConfig(const EGLint* attribs,

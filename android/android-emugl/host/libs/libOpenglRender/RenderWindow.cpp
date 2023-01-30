@@ -44,7 +44,7 @@ void my_debug(const char* function, int line, const char* format, ...) {
     va_list args;
     va_start(args, format);
     mutex.lock();
-    fprintf(stderr, "%s:%d:", function, line);
+    DBG("%s:%d:", function, line);
     vfprintf(stderr, format, args);
     mutex.unlock();
     va_end(args);
@@ -398,9 +398,8 @@ void RenderWindow::setPaused(bool paused) {
     // If pausing, flush commands
     if (!mPaused && paused) {
         if (useThread()) {
-            fprintf(stderr,
-                    "WARNING: flushMessages unsupported for RenderWindowThread. "
-                    "Generic snapshot load might segfault.\n");
+            ERR("WARNING: flushMessages unsupported for RenderWindowThread. "
+                "Generic snapshot load might segfault.\n");
         } else {
             mRepostCommands.waitForEmpty();
         }

@@ -44,7 +44,6 @@
 #include <stdint.h>
 
 using DeleteColorbufferFunc = void (*)(uint32_t);
-
 struct ColorBufferRef {
     ColorBufferPtr cb;
     uint32_t refcount;  // number of client-side references
@@ -591,6 +590,19 @@ public:
     static void setDeleteColorbufferCallBack(DeleteColorbufferFunc deleteColorbufferFunc) {
         s_deleteColorbufferCallBack = deleteColorbufferFunc;
     }
+
+    void setExitFlag() {
+        m_isExit = true;
+    }
+    bool getExitFlag() {
+        return m_isExit;
+    }
+
+    void resetTextureBindImages();
+
+    void addThread(uint32_t pid);
+
+    bool deleteThread(uint32_t pid);
 private:
     FrameBuffer(unsigned int p_width, unsigned int p_height, bool useSubWindow);
     HandleType genHandle_locked();
@@ -811,6 +823,8 @@ private:
     android::base::MessageChannel<HandleType, 1024>
         mOutstandingColorBufferDestroys;
     int rotation = 0;
+    bool m_isExit = false;
     static DeleteColorbufferFunc s_deleteColorbufferCallBack;
+    std::map<uint32_t, int> m_pidThreads;
 };
 #endif

@@ -23,6 +23,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
 #define ENABLE_THREAD_ID 0
 
 namespace android {
@@ -34,7 +38,7 @@ namespace {
 testing::LogOutput* gLogOutput = NULL;
 
 bool gDcheckLevel = false;
-LogSeverity gMinLogLevel = LOG_INFO;
+LogSeverity gMinLogLevel = LOG_VERBOSE;
 
 // Convert a severity level into a string.
 const char* severityLevelToString(LogSeverity severity) {
@@ -65,7 +69,11 @@ void defaultLogMessage(const LogParams& params,
 
     FILE* output = params.severity >= LOG_WARNING ? stderr : stdout;
     if (params.quiet) {
-        fprintf(output, "emulator: %s: %.*s\n", severityLevelToString(params.severity), int(messageLen), message);
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_ERROR, "EmuBASE" , "%s", message);
+#else
+    fprintf(output, "emulator: %s: %.*s\n", severityLevelToString(params.severity), int(messageLen), message);
+#endif
     } else {
         StringView path = params.file;
         StringView filename;
@@ -73,6 +81,9 @@ void defaultLogMessage(const LogParams& params,
             filename = path;
         }
 
+#ifdef __ANDROID__
+        __android_log_print(ANDROID_LOG_INFO, "EmuBASE" , "%s", message);
+#else
         fprintf(output, "emulator: %s%s: %s:%d: %.*s\n", tidStr,
                 severityLevelToString(params.severity), c_str(filename).get(),
                 params.lineno, int(messageLen), message);
@@ -86,6 +97,7 @@ void defaultLogMessage(const LogParams& params,
             // performance.
             fflush(stderr);
         }
+#endif
     }
 
     if (params.severity >= LOG_FATAL) {

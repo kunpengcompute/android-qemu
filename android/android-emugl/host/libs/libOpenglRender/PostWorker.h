@@ -13,6 +13,11 @@
 
 #include <functional>
 #include <vector>
+#ifdef REMOTE_RENDER
+#include <memory>
+#include <mutex>
+#include <thread>
+#endif
 
 class ColorBuffer;
 class FrameBuffer;
@@ -59,6 +64,10 @@ private:
     void composeLayer(ComposeLayer* l);
     void fillMultiDisplayPostStruct(ComposeLayer* l, int32_t x, int32_t y,
                                     uint32_t w, uint32_t h, ColorBuffer* cb);
+#ifdef REMOTE_RENDER
+    void EncodeTexture();
+    void EncodeTexThread();
+#endif
 
 private:
     EGLContext mContext;
@@ -73,4 +82,13 @@ private:
     int m_viewportHeight = 0;
     GLuint m_composeFbo = 0;
     DISALLOW_COPY_AND_ASSIGN(PostWorker);
+    GLuint m_encodeTex = 0; // 渲染上屏的copy的纹理
+#ifdef REMOTE_RENDER
+    std::unique_ptr<std::thread> m_encodeGLThread = {}; // 编码线程
+    bool m_isRunning = false;
+    GLuint m_encoderFBO = 0;
+    std::mutex m_lockEnc = {};  // 编码线程和上屏线程互斥
+    int m_width = 0;
+    int m_height = 0;
+#endif
 };
