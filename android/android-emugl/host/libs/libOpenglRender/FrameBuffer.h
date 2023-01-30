@@ -288,7 +288,7 @@ public:
     // glEGLImageTargetTexture2DOES() for all GLES versions.
     // |p_colorbuffer| is the ColorBuffer's handle value.
     // Returns true on success, false on failure.
-    bool  bindColorBufferToTexture(HandleType p_colorbuffer);
+    bool  bindColorBufferToTexture(HandleType p_colorbuffer, uint32_t isPostColorbuffer);
     bool  bindColorBufferToTexture2(HandleType p_colorbuffer);
 
     // Bind the current context's EGL_RENDERBUFFER_OES render buffer to this
@@ -603,6 +603,8 @@ public:
     void addThread(uint32_t pid);
 
     bool deleteThread(uint32_t pid);
+
+    void bindFramebuffer(GLenum target, GLuint framebuffer);
 private:
     FrameBuffer(unsigned int p_width, unsigned int p_height, bool useSubWindow);
     HandleType genHandle_locked();

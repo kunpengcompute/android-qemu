@@ -1,7 +1,4 @@
 #include "PostWorker.h"
-#ifdef REMOTE_RENDER
-#include "EmuglInterface.h"
-#endif
 
 #include "ColorBuffer.h"
 #include "DispatchTables.h"
@@ -17,10 +14,6 @@
     DBG("%s:%d| " fmt, __func__, __LINE__, ##__VA_ARGS__)
 #else
 #define DD(fmt, ...) (void)0
-#endif
-
-#ifdef REMOTE_RENDER
-typedef ColorBuffer::RecursiveScopedHelperContext ScopedBind;
 #endif
 
 PostWorker::PostWorker(PostWorker::BindSubwinCallback&& cb) :
@@ -43,50 +36,6 @@ void PostWorker::fillMultiDisplayPostStruct(ComposeLayer* l, int32_t x, int32_t 
     l->crop.bottom = 0.0;
 }
 
-#ifdef REMOTE_RENDER
-void PostWorker::EncodeTexThread() {
-    INFO("encode thread start");
-    constexpr int oneSecond = 1000000;
-    constexpr int encode_frame_rate = 30;
-    int interval = oneSecond / encode_frame_rate; // 编码时间间隔，取决于编码帧率
-    INFO("encode begin isRunning %d", m_isRunning);
-    while (m_isRunning) {
-        {
-            ScopedBind bind(mFb->getColorBufferHelper());
-            if (!bind.isOk()) {
-                ERR("encode failed to make current\n");
-                return;
-            }
-            EncodeTexture();
-        }
-        usleep(interval);
-    }
-}
-
-void PostWorker::EncodeTexture() {
-    // 将帧缓存拷贝到纹理，传给视频编码器
-    uint32_t encTexture;
-    uint32_t encTarget;
-    EncoderGLInterface::getEncodeTex(&encTexture, &encTarget);
-
-    std::lock_guard<std::mutex> lock(m_lockEnc);
-    // 将m_encodeTex纹理附在帧缓冲上
-    s_gles2.glGenFramebuffers(1, &m_encoderFBO);
-    s_gles2.glBindFramebuffer(GL_READ_FRAMEBUFFER, m_encoderFBO);
-    s_gles2.glFramebufferTexture2D(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0_OES,
-                                   GL_TEXTURE_2D, m_encodeTex, 0);
-    // 将帧缓冲数据复制到视频编码纹理上
-    s_gles2.glBindTexture(GL_TEXTURE_2D, encTexture);
-    s_gles2.glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, m_width,
-                                m_height);
-    if (m_encoderFBO > 0) {
-        s_gles2.glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
-    }
-    // 调用GPU编码
-    EncoderGLInterface::encodeTex();
-}
-#endif
-
 void PostWorker::post(ColorBuffer* cb) {
     // bind the subwindow eglSurface
     if (!m_initialized) {
@@ -100,20 +49,6 @@ void PostWorker::post(ColorBuffer* cb) {
     float py = mFb->getPy();
     int zRot = mFb->getZrot();
 
-#ifdef REMOTE_RENDER
-    if (!m_isRunning) {
-        m_width = windowWidth;
-        m_height = windowHeight;
-        // 生成帧编码的encodeTex
-        s_gles2.glGenTextures(1, &m_encodeTex);
-        s_gles2.glBindTexture(GL_TEXTURE_2D, m_encodeTex);
-        s_gles2.glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, windowWidth, windowHeight,
-                                0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-        // 开启线程GL编码
-        m_isRunning = true;
-        m_encodeGLThread = std::make_unique<std::thread>(std::bind(&PostWorker::EncodeTexThread, this));
-    }
-#endif
     cb->waitSync();
     if (zRot == 90 || zRot == 270) {
         s_gles2.glViewport(0, 0, mFb->getGuestHeight(), mFb->getGuestWidth());
@@ -130,16 +65,11 @@ void PostWorker::post(ColorBuffer* cb) {
     // finally, compute translation values
     float dx = px * fx;
     float dy = py * fy;
-
+    bool isSkipFlush = false;
     // render the color buffer to the window and apply the overlay
-    GLuint tex = cb->scale();
-
-    {
-#ifdef REMOTE_RENDER
-        std::lock_guard<std::mutex> lock(m_lockEnc);
-#endif
-        cb->postWithOverlay(tex, zRot, dx, dy, m_encodeTex);
-    }
+    GLuint tex = cb->scale(isSkipFlush);
+    uint32_t encTexture = 0; // call nv interface get encode texture handle to copy render fb
+    cb->postWithOverlay(tex, zRot, dx, dy, encTexture, isSkipFlush);
     s_egl.eglSwapBuffers(mFb->getDisplay(), mFb->getWindowSurface());
 }
 
@@ -295,15 +225,4 @@ PostWorker::~PostWorker() {
         s_egl.eglMakeCurrent(mFb->getDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE,
                              EGL_NO_CONTEXT);
     }
-    if (m_encodeTex) {
-        s_gles2.glDeleteTextures(1, &m_encodeTex);
-    }
-#ifdef REMOTE_RENDER
-    if (m_encodeGLThread != nullptr) {
-        INFO("encode thread end");
-        m_encodeGLThread->join();
-        m_encodeGLThread = nullptr;
-    }
-    m_isRunning = false;
-#endif
 }

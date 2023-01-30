@@ -74,6 +74,7 @@ struct RenderThreadInfo {
     bool m_isNeedChange = false;
     bool m_isSurfaceFlinger = false;
     bool m_isFlushIng = false;
+    ColorBufferPtr m_surfaceFingerFboColorbuffer = nullptr; // AOSP11 SurfaceFlinger使用FBO对象渲染关联的Colorbuffer
     std::deque<ColorBufferPtr> m_colorbuffers;
     EGLImageKHR m_curBindImages = EGL_NO_IMAGE_KHR;
     // Functions to save / load a snapshot

@@ -846,7 +846,7 @@ void rcFBSetSwapInterval(EGLint interval)
    // XXX: TBD - should be implemented
 }
 
-void rcBindTexture(uint32_t colorBuffer)
+void rcBindTexture(uint32_t colorBuffer, uint32_t isPostColorbuffer)
 {
     AEMU_SCOPED_THRESHOLD_TRACE_CALL();
     FrameBuffer *fb = FrameBuffer::getFB();
@@ -856,7 +856,7 @@ void rcBindTexture(uint32_t colorBuffer)
     // Update from Vulkan if necessary
     goldfish_vk::updateColorBufferFromVkImage(colorBuffer);
 
-    fb->bindColorBufferToTexture(colorBuffer);
+    fb->bindColorBufferToTexture(colorBuffer, isPostColorbuffer);
 }
 
 void rcBindRenderbuffer(uint32_t colorBuffer)

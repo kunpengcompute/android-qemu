@@ -22,10 +22,6 @@
 #include <atomic>
 #include <math.h>
 
-#ifdef REMOTE_RENDER
-#include "EmuglInterface.h"
-#endif
-
 #include "DispatchTables.h"
 #include "GLESVersionDetector.h"
 #include "NativeSubWindow.h"
@@ -140,7 +136,9 @@ static ClientGPUType g_clientgpu = ClientGPUType::PHONE;
 ClientGPUType getClientGPUType(std::string&& renderStr) {
     ClientGPUType gpuType = ClientGPUType::PHONE;
 
-    if (renderStr.find("AMD Radeon (TM) Pro WX 5100 Graphics") != std::string::npos) {
+    if (renderStr.find("AMD Radeon (TM) Pro WX 5100 Graphics") != std::string::npos || // kbox 9在WX5100上显示显卡的名称
+        renderStr.find("AMD POLARIS10") != std::string::npos || // kbox 11在WX5100上显示显卡的名称
+        renderStr.find("AMD SIENNA_CICHLID") != std::string::npos) { // kbox 9/11在WX6800上显示显卡的名称
 #ifdef __ANDROID__
         gpuType = ClientGPUType::AMD_5100_KBOX;
 #else
@@ -654,9 +652,6 @@ bool FrameBuffer::initialize(unsigned int width, unsigned int height, bool useSu
     }
 
     goldfish_vk::setGlInteropSupported(fb->m_vulkanInteropSupported);
-#ifdef REMOTE_RENDER
-    EncoderGLInterface::initEncoder(width, height);
-#endif
     //
     // Keep the singleton framebuffer pointer
     //
@@ -1860,8 +1855,9 @@ bool FrameBuffer::updateYuv(HandleType p_colorbuffer,
 
     return true;
 }
-bool FrameBuffer::bindColorBufferToTexture(HandleType p_colorbuffer) {
+bool FrameBuffer::bindColorBufferToTexture(HandleType p_colorbuffer, uint32_t isPostColorbuffer) {
     ColorBufferPtr cb = nullptr;
+    RenderThreadInfo* tInfo = RenderThreadInfo::get();
     {
         AutoLock mutex(m_lock);
         ColorBufferMap::iterator c(m_colorbuffers.find(p_colorbuffer));
@@ -1871,13 +1867,22 @@ bool FrameBuffer::bindColorBufferToTexture(HandleType p_colorbuffer) {
             return false;
         }
         cb = (*c).second.cb;
-        RenderThreadInfo* tInfo = RenderThreadInfo::get();
-        if (tInfo->m_isFlushIng) {
-            cb->setNeedWaitConsume();
-            tInfo->m_colorbuffers.push_back(cb);
+        if (isPostColorbuffer == 0) {
+            if (tInfo->m_isFlushIng) {
+                cb->setNeedWaitConsume();
+                tInfo->m_colorbuffers.push_back(cb);
+            }
         }
     }
-    bool ret = cb->bindToTexture();
+    bool ret;
+    if (isPostColorbuffer == 1 && tInfo->m_isSurfaceFlinger) {
+        // AOSP11情况下，SurfaceFlinger使用FBO对象关联一个待Post属性的colorbuffer，则表示开始一帧的合成。
+        ret = cb->bindToTexture3();
+        tInfo->m_isFlushIng = true;
+        tInfo->m_surfaceFingerFboColorbuffer = cb;
+    } else {
+        ret = cb->bindToTexture();
+    }
     return ret;
 }
 
@@ -2244,7 +2249,8 @@ bool FrameBuffer::postImpl(HandleType p_colorbuffer,
         markOpened(&c->second);
         c->second.cb->touch();
         c->second.cb->waitSync();
-        c->second.cb->scale();
+        bool isSkipFlush = false;
+        c->second.cb->scale(isSkipFlush);
         s_gles2.glFlush();
 
         // If there is no sub-window, don't display anything, the client will
@@ -2922,3 +2928,19 @@ bool FrameBuffer::deleteThread(uint32_t pid)
     return false;
 }
 
+void FrameBuffer::bindFramebuffer(GLenum target, GLuint framebuffer)
+{
+    if (target == GL_FRAMEBUFFER && framebuffer == 0) {
+        RenderThreadInfo *tInfo = RenderThreadInfo::get();
+        if (tInfo != nullptr && tInfo->m_isSurfaceFlinger && tInfo->m_isFlushIng && tInfo->m_surfaceFingerFboColorbuffer != nullptr) {
+            while (!tInfo->m_colorbuffers.empty()) {
+                auto colorbuffer = tInfo->m_colorbuffers.front();
+                colorbuffer->createConsumeSync();
+                tInfo->m_colorbuffers.pop_front();
+            }
+            tInfo->m_surfaceFingerFboColorbuffer->createProductSync();
+            tInfo->m_isFlushIng = false;
+            tInfo->m_surfaceFingerFboColorbuffer = nullptr;
+        }
+    }
+}

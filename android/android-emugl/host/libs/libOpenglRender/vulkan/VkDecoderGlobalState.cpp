@@ -20,8 +20,6 @@
 #include <unordered_map>
 #include <vector>
 #include <fstream>
-#include <map>
-#include <string>
 
 #include "FrameBuffer.h"
 #include "GLcommon/etc.h"
@@ -57,7 +55,7 @@ using android::base::Optional;
 using android::base::pj;
 using android::base::System;
 
-#define VKDGS_DEBUG 1
+#define VKDGS_DEBUG 0
 
 #if VKDGS_DEBUG
 #define VKDGS_LOG(fmt,...) DBG("%s:%d " fmt "\n", __func__, __LINE__, ##__VA_ARGS__);
@@ -212,7 +210,7 @@ public:
             android::base::Pool* pool,
             const VkInstanceCreateInfo* pCreateInfo,
             const VkAllocationCallbacks* pAllocator,
-            VkInstance* pBoxedInstance) {
+            VkInstance* pInstance) {
 
         std::vector<const char*> finalExts =
             filteredExtensionNames(
@@ -235,8 +233,6 @@ public:
         // bug: 155795731 (see below)
         AutoLock lock(mLock);
 
-        VkInstance driverInstance;
-        VkInstance* pInstance = &driverInstance;
         VkResult res = m_vk->vkCreateInstance(&createInfoFiltered, pAllocator, pInstance);
 
         if (res != VK_SUCCESS) {
@@ -264,7 +260,7 @@ public:
         }
 
         // Box it up
-        VkInstance boxed = new_boxed_VkInstance(*pInstance, nullptr, true /* own dispatch */, *pBoxedInstance);
+        VkInstance boxed = new_boxed_VkInstance(*pInstance, nullptr, true /* own dispatch */);
         init_vulkan_dispatch_from_instance(
                 m_vk, *pInstance,
                 dispatch_VkInstance(boxed));
@@ -280,6 +276,8 @@ public:
         }
 
         mInstanceInfo[*pInstance] = info;
+
+        *pInstance = (VkInstance)info.boxed;
 
         auto fb = FrameBuffer::getFB();
         if (!fb) return res;
@@ -339,42 +337,27 @@ public:
             android::base::Pool* pool,
             VkInstance boxed_instance,
             uint32_t* physicalDeviceCount,
-            VkPhysicalDevice* boxedPhysicalDevices) {
+            VkPhysicalDevice* physicalDevices) {
 
         auto instance = unbox_VkInstance(boxed_instance);
         auto vk = dispatch_VkInstance(boxed_instance);
 
-        // 在云手机场景，客户端运行在 Kbox 或者物理手机上，只会有一块显卡，因此 physicalDeviceCount 必定为 1
-        // 在分布式渲染场景，客户端运行在服务器上，此时可能会有多块显卡；这种场景下必须补充设计云手机与显卡的绑定关系
-        uint32_t driverPhysicalDeviceCount;
-        auto res = vk->vkEnumeratePhysicalDevices(instance, &driverPhysicalDeviceCount, nullptr);
-        if (*physicalDeviceCount != 1 || driverPhysicalDeviceCount != 1 || res != VK_SUCCESS) {
-            ERR("Must support only one physical device. physicalDeviceCount:%u, driverPhysicalDeviceCount:%u, res:%#x",
-                *physicalDeviceCount, driverPhysicalDeviceCount, res);
-            return res == VK_SUCCESS ? VK_ERROR_DEVICE_LOST : res;
-        }
+        auto res = vk->vkEnumeratePhysicalDevices(instance, physicalDeviceCount, physicalDevices);
 
-        std::vector<VkPhysicalDevice> physicalDevices;
-        if (boxedPhysicalDevices) {
-            physicalDevices.resize(driverPhysicalDeviceCount);
-            auto res = vk->vkEnumeratePhysicalDevices(instance, &driverPhysicalDeviceCount, physicalDevices.data());
-            if (res != VK_SUCCESS) {
-                ERR("Driver vkEnumeratePhysicalDevices return failed:%#x", res);
-                return res;
-            }
-        }
+        if (res != VK_SUCCESS) return res;
 
         AutoLock lock(mLock);
 
-        if (physicalDeviceCount && boxedPhysicalDevices) {
+        if (physicalDeviceCount && physicalDevices) {
             // Box them up
             for (uint32_t i = 0; i < *physicalDeviceCount; ++i) {
                 mPhysicalDeviceToInstance[physicalDevices[i]] = instance;
 
                 auto& physdevInfo = mPhysdevInfo[physicalDevices[i]];
 
+
                 physdevInfo.boxed =
-                    new_boxed_VkPhysicalDevice(physicalDevices[i], vk, false /* does not own dispatch */, boxedPhysicalDevices[i]);
+                    new_boxed_VkPhysicalDevice(physicalDevices[i], vk, false /* does not own dispatch */);
 
                 vk->vkGetPhysicalDeviceProperties(physicalDevices[i],
                         &physdevInfo.props);
@@ -398,11 +381,7 @@ public:
                         physicalDevices[i], &queueFamilyPropCount,
                         physdevInfo.queueFamilyProperties.data());
 
-                if (boxedPhysicalDevices[i] != physdevInfo.boxed) {
-                    ERR("physical device handle map wrong. boxedPhysicalDevices:%#x, physdevInfo.boxed:%#x",
-                        boxedPhysicalDevices[i], physdevInfo.boxed);
-                    return VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
-                }
+                physicalDevices[i] = (VkPhysicalDevice)physdevInfo.boxed;
             }
         }
 
@@ -438,8 +417,7 @@ public:
 
         auto instance = mPhysicalDeviceToInstance[physicalDevice];
 
-        // 在 Kbox 做客户端时，vkGetPhysicalDeviceFeatures2 指针为空，此时会调用 vkGetPhysicalDeviceFeatures 作为替代
-        if (physdevInfo->props.apiVersion >= VK_MAKE_VERSION(1, 1, 0) && vk->vkGetPhysicalDeviceFeatures2) {
+        if (physdevInfo->props.apiVersion >= VK_MAKE_VERSION(1, 1, 0)) {
             vk->vkGetPhysicalDeviceFeatures2(physicalDevice, pFeatures);
         } else if (hasInstanceExtension(instance, "VK_KHR_get_physical_device_properties2")) {
             vk->vkGetPhysicalDeviceFeatures2KHR(physicalDevice, pFeatures);
@@ -3919,63 +3897,39 @@ public:
     }
 
 #define DEFINE_BOXED_DISPATCHABLE_HANDLE_API_IMPL(type) \
-    std::map<type, type> mapToServer##type; \
-    std::map<type, type> mapToClient##type; \
-    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch, type boxed = VK_NULL_HANDLE) { \
+    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch) { \
         DispatchableHandleInfo<uint64_t> item; \
         item.underlying = (uint64_t)underlying; \
         item.dispatch = dispatch ? dispatch : new VulkanDispatch; \
         item.ownDispatch = ownDispatch; \
         auto res = (type)newGlobalHandle(item, Tag_##type); \
-        if (std::string(#type) == std::string("VkInstance") || std::string(#type) == std::string("VkPhysicalDevice")) { \
-            if (boxed == VK_NULL_HANDLE) { ERR("%s: input "#type" handle is null", __func__); return VK_NULL_HANDLE; } \
-            mapToServer##type[res] = boxed; \
-            mapToClient##type[boxed] = res; \
-            return boxed; \
-        } \
         return res; \
     } \
     void delete_boxed_##type(type boxed) { \
-        if (std::string(#type) == std::string("VkInstance") || std::string(#type) == std::string("VkPhysicalDevice")) { \
-            mGlobalHandleStore.remove((uint64_t)mapToClient##type[boxed]); \
-            mapToServer##type.erase(mapToClient##type[boxed]); \
-            mapToClient##type.erase(boxed); \
-        } \
         mGlobalHandleStore.remove((uint64_t)boxed); \
     } \
     type unbox_##type(type boxed) { \
         AutoLock lock(mGlobalHandleStore.lock); \
-        if (std::string(#type) == std::string("VkInstance") || std::string(#type) == std::string("VkPhysicalDevice")) { \
-            auto elt = mGlobalHandleStore.getLocked((uint64_t)(uintptr_t)mapToClient##type[boxed]); \
-            if (!elt) return VK_NULL_HANDLE; \
-            return (type)elt->underlying; \
-        } \
-        auto elt = mGlobalHandleStore.getLocked((uint64_t)(uintptr_t)boxed); \
+        auto elt = mGlobalHandleStore.getLocked( \
+                (uint64_t)(uintptr_t)boxed); \
         if (!elt) return VK_NULL_HANDLE; \
         return (type)elt->underlying; \
     } \
     type unboxed_to_boxed_##type(type unboxed) { \
         AutoLock lock(mGlobalHandleStore.lock); \
-        type boxed = (type)mGlobalHandleStore.getBoxedFromUnboxedLocked((uint64_t)(uintptr_t)unboxed); \
-        if (std::string(#type) == std::string("VkInstance") || std::string(#type) == std::string("VkPhysicalDevice")) { \
-            boxed = mapToServer##type[boxed]; \
-        } \
-        return boxed; \
+        return (type)mGlobalHandleStore.getBoxedFromUnboxedLocked( \
+                (uint64_t)(uintptr_t)unboxed); \
     } \
     VulkanDispatch* dispatch_##type(type boxed) { \
         AutoLock lock(mGlobalHandleStore.lock); \
-        if (std::string(#type) == std::string("VkInstance") || std::string(#type) == std::string("VkPhysicalDevice")) { \
-            auto elt = mGlobalHandleStore.getLocked((uint64_t)(uintptr_t)mapToClient##type[boxed]); \
-            if (!elt) { ERR("%s: err not found boxed 0x%llx\n", __func__, (uint64_t)(uintptr_t)boxed); return nullptr; } \
-            return elt->dispatch; \
-        } \
-        auto elt = mGlobalHandleStore.getLocked((uint64_t)(uintptr_t)boxed); \
-        if (!elt) { ERR("%s: err not found boxed 0x%llx\n", __func__, (uint64_t)(uintptr_t)boxed); return nullptr; } \
+        auto elt = mGlobalHandleStore.getLocked( \
+                (uint64_t)(uintptr_t)boxed); \
+        if (!elt) { ERR("%s: err not found boxed %p\n", __func__, boxed); return nullptr; } \
         return elt->dispatch; \
     } \
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_API_IMPL(type) \
-    type new_boxed_non_dispatchable_##type(type underlying, type boxed = VK_NULL_HANDLE) { \
+    type new_boxed_non_dispatchable_##type(type underlying) { \
         DispatchableHandleInfo<uint64_t> item; \
         item.underlying = (uint64_t)underlying; \
         auto res = (type)newGlobalHandle(item, Tag_##type); \
@@ -5783,8 +5737,8 @@ VkResult VkDecoderGlobalState::on_vkCreateInstance(
     android::base::Pool* pool,
     const VkInstanceCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
-    VkInstance* pBoxedInstance) {
-    return mImpl->on_vkCreateInstance(pool, pCreateInfo, pAllocator, pBoxedInstance);
+    VkInstance* pInstance) {
+    return mImpl->on_vkCreateInstance(pool, pCreateInfo, pAllocator, pInstance);
 }
 
 void VkDecoderGlobalState::on_vkDestroyInstance(
@@ -5798,8 +5752,8 @@ VkResult VkDecoderGlobalState::on_vkEnumeratePhysicalDevices(
     android::base::Pool* pool,
     VkInstance instance,
     uint32_t* physicalDeviceCount,
-    VkPhysicalDevice* boxedPhysicalDevices) {
-    return mImpl->on_vkEnumeratePhysicalDevices(pool, instance, physicalDeviceCount, boxedPhysicalDevices);
+    VkPhysicalDevice* physicalDevices) {
+    return mImpl->on_vkEnumeratePhysicalDevices(pool, instance, physicalDeviceCount, physicalDevices);
 }
 
 void VkDecoderGlobalState::on_vkGetPhysicalDeviceFeatures(
@@ -6736,8 +6690,8 @@ VkDecoderSnapshot* VkDecoderGlobalState::snapshot() {
 LIST_TRANSFORMED_TYPES(DEFINE_TRANSFORMED_TYPE_IMPL)
 
 #define DEFINE_BOXED_DISPATCHABLE_HANDLE_API_DEF(type) \
-    type VkDecoderGlobalState::new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch, type boxed) { \
-        return mImpl->new_boxed_##type(underlying, dispatch, ownDispatch, boxed); \
+    type VkDecoderGlobalState::new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch) { \
+        return mImpl->new_boxed_##type(underlying, dispatch, ownDispatch); \
     } \
     void VkDecoderGlobalState::delete_boxed_##type(type boxed) { \
         mImpl->delete_boxed_##type(boxed); \
@@ -6753,8 +6707,8 @@ LIST_TRANSFORMED_TYPES(DEFINE_TRANSFORMED_TYPE_IMPL)
     } \
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_API_DEF(type) \
-    type VkDecoderGlobalState::new_boxed_non_dispatchable_##type(type underlying, type boxed) { \
-        return mImpl->new_boxed_non_dispatchable_##type(underlying, boxed); \
+    type VkDecoderGlobalState::new_boxed_non_dispatchable_##type(type underlying) { \
+        return mImpl->new_boxed_non_dispatchable_##type(underlying); \
     } \
     void VkDecoderGlobalState::delete_boxed_non_dispatchable_##type(type boxed) { \
         mImpl->delete_boxed_non_dispatchable_##type(boxed); \
@@ -6781,8 +6735,8 @@ GOLDFISH_VK_LIST_NON_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_NON_DISPATCHABLE_HAN
     } \
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_GLOBAL_API_DEF(type) \
-    type new_boxed_non_dispatchable_##type(type underlying, type boxed) { \
-        return VkDecoderGlobalState::get()->new_boxed_non_dispatchable_##type(underlying, boxed); \
+    type new_boxed_non_dispatchable_##type(type underlying) { \
+        return VkDecoderGlobalState::get()->new_boxed_non_dispatchable_##type(underlying); \
     } \
     void delete_boxed_non_dispatchable_##type(type boxed) { \
         VkDecoderGlobalState::get()->delete_boxed_non_dispatchable_##type(boxed); \

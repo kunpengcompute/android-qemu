@@ -218,7 +218,7 @@ public:
     bool flush();
     // Scale the underlying texture of this ColorBuffer to match viewport size.
     // It returns the texture name after scaling.
-    GLuint scale();
+    GLuint scale(bool& isSkipFlush);
     // Post this ColorBuffer to the host native sub-window.
     // |rotation| is the rotation angle in degrees, clockwise in the GL
     // coordinate space.
@@ -227,13 +227,14 @@ public:
     // the device screen overlay (if there is one).
     // |rotation| is the rotation angle in degrees, clockwise in the GL
     // coordinate space.
-    bool postWithOverlay(GLuint tex, float rotation, float dx, float dy, GLuint& encTex);
+    bool postWithOverlay(GLuint tex, float rotation, float dx, float dy, GLuint& encTex, bool isSkipFlush);
 
     // Bind the current context's EGL_TEXTURE_2D texture to this ColorBuffer's
     // EGLImage. This is intended to implement glEGLImageTargetTexture2DOES()
     // for all GLES versions.
     bool bindToTexture();
     bool bindToTexture2();
+    bool bindToTexture3();
 
     // Bind the current context's EGL_RENDERBUFFER_OES render buffer to this
     // ColorBuffer's EGLImage. This is intended to implement
@@ -282,6 +283,7 @@ public:
     void waitSync(bool debug = false);
     void setDisplay(uint32_t displayId) { m_displayId = displayId; }
     uint32_t getDisplay() { return m_displayId; }
+    void createProductSync();
     void waitProductSync();
     void waitConsumeSync();
     void setNeedWaitConsume();
@@ -343,12 +345,9 @@ private:
     EGLSyncKHR m_productFence = EGL_NO_SYNC_KHR;
     EGLSyncKHR m_comuseFence = EGL_NO_SYNC_KHR;
     bool m_isFlushColorbuffer = false;
-    bool m_isNeedWaitConsume = false;
+    int m_needWaitConsumeCount = 0;
     std::mutex m_consumeWait;
     std::condition_variable m_consumeWaitCv;
-#ifdef REMOTE_RENDER
-    GLuint m_encodeFBO = 0;
-#endif
 };
 
 typedef emugl::SmartPtr<ColorBuffer> ColorBufferPtr;

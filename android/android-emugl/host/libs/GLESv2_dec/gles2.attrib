@@ -1499,3 +1499,7 @@ glDrawElementsInstancedBaseVertexDataAEMU
 glDrawElementsInstancedBaseVertexOffsetAEMU
     flag custom_decoder
     flag not_api
+
+glBindFramebufferAEMU
+    flag custom_decoder
+    flag not_api

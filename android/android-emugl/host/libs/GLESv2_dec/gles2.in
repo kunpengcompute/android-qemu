@@ -622,3 +622,4 @@ GL_ENTRY(void, glDrawElementsInstancedBaseVertexOffsetAEMU, GLenum mode, GLsizei
 GL_ENTRY(void, glGetnUniformfv, GLuint program, GLint location, GLsizei bufSize, GLfloat *params)
 GL_ENTRY(void, glGetnUniformiv, GLuint program, GLint location, GLsizei bufSize, GLint *params)
 GL_ENTRY(void, glGetnUniformuiv, GLuint program, GLint location, GLsizei bufSize, GLuint *params)
+GL_ENTRY(void, glBindFramebufferAEMU, GLenum target, GLuint framebuffer)

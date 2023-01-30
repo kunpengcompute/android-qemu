@@ -248,6 +248,6 @@ private:
     static void gles2_APIENTRY s_glDrawElementsBaseVertexData(void* self, GLenum mode, GLsizei count, GLenum type, void *data, GLuint datalen, GLint basevertex);
     static void gles2_APIENTRY s_glDrawElementsInstancedBaseVertexDataAEMU(void* self, GLenum mode, GLsizei count, GLenum type, void *indices, GLsizei primcount, GLsizei datalen, GLint basevertex);
     static void gles2_APIENTRY s_glDrawElementsInstancedBaseVertexOffsetAEMU(void* self, GLenum mode, GLsizei count, GLenum type, GLuint offset, GLsizei primcount, GLint basevertex);
-
+    static void gles2_APIENTRY s_glBindFramebufferAEMU(void* self, GLenum target, GLuint framebuffer);
 };
 #endif

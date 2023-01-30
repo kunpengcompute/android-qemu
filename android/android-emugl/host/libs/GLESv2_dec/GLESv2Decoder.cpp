@@ -34,6 +34,7 @@
 
 #include <string.h>
 #include "RenderThreadInfo.h"
+#include "FrameBuffer.h"
 
 using android::base::AutoLock;
 using android::base::StaticLock;
@@ -161,6 +162,7 @@ int GLESv2Decoder::initGL(get_proc_func_t getProcFunc, void *getProcFuncData)
     glDrawElementsBaseVertexData = s_glDrawElementsBaseVertexData;
     glDrawElementsInstancedBaseVertexDataAEMU = s_glDrawElementsInstancedBaseVertexDataAEMU;
     glDrawElementsInstancedBaseVertexOffsetAEMU = s_glDrawElementsInstancedBaseVertexOffsetAEMU;
+    glBindFramebufferAEMU = s_glBindFramebufferAEMU;
 
     OVERRIDE_DEC(glCreateShader)
     OVERRIDE_DEC(glCreateProgram)
@@ -1015,4 +1017,11 @@ void GLESv2Decoder::s_glDrawElementsInstancedBaseVertexOffsetAEMU(void* self, GL
 {
     GLESv2Decoder *ctx = (GLESv2Decoder *)self;
     ctx->glDrawElementsInstancedBaseVertex(mode, count, type, SafePointerFromUInt(offset), primcount, basevertex);
+}
+
+void GLESv2Decoder::s_glBindFramebufferAEMU(void* self, GLenum target, GLuint framebuffer)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+    FrameBuffer::getFB()->bindFramebuffer(target, framebuffer);
+    ctx->glBindFramebuffer(target, framebuffer);
 }

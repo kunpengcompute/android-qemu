@@ -98,84 +98,59 @@ struct Vertex {
 };
 
 const Vertex kVertices[] = {
-    // 0 degree
-    {{ +1, -1, +0 }, { +1, +0 }},
-    {{ +1, +1, +0 }, { +1, +1 }},
-    {{ -1, +1, +0 }, { +0, +1 }},
-    {{ -1, -1, +0 }, { +0, +0 }},
-    // 90 degree clock-wise
-    {{ +1, -1, +0 }, { +1, +1 }},
-    {{ +1, +1, +0 }, { +0, +1 }},
-    {{ -1, +1, +0 }, { +0, +0 }},
-    {{ -1, -1, +0 }, { +1, +0 }},
-    // 180 degree clock-wise
-    {{ +1, -1, +0 }, { +0, +1 }},
-    {{ +1, +1, +0 }, { +0, +0 }},
-    {{ -1, +1, +0 }, { +1, +0 }},
-    {{ -1, -1, +0 }, { +1, +1 }},
-    // 270 degree clock-wise
-    {{ +1, -1, +0 }, { +0, +0 }},
-    {{ +1, +1, +0 }, { +1, +0 }},
-    {{ -1, +1, +0 }, { +1, +1 }},
-    {{ -1, -1, +0 }, { +0, +1 }},
     // flip horizontally
     {{ +1, -1, +0 }, { +0, +0 }},
     {{ +1, +1, +0 }, { +0, +1 }},
     {{ -1, +1, +0 }, { +1, +1 }},
     {{ -1, -1, +0 }, { +1, +0 }},
     // flip vertically
-#if SKIP_FLUSH
-    {{ +1, -1, +0 }, { +1, +0 }},
-    {{ +1, +1, +0 }, { +1, +1 }},
-    {{ -1, +1, +0 }, { +0, +1 }},
-    {{ -1, -1, +0 }, { +0, +0 }},
-#else
     {{ +1, -1, +0 }, { +1, +1 }},
     {{ +1, +1, +0 }, { +1, +0 }},
     {{ -1, +1, +0 }, { +0, +0 }},
     {{ -1, -1, +0 }, { +0, +1 }},
-#endif
     // flip source image horizontally, the rotate 90 degrees clock-wise
-#if SKIP_FLUSH
-    {{ +1, -1, +0 }, { +0, +0 }},
-    {{ +1, +1, +0 }, { +1, +0 }},
-    {{ -1, +1, +0 }, { +1, +1 }},
-    {{ -1, -1, +0 }, { +0, +1 }},
-#else
     {{ +1, -1, +0 }, { +0, +1 }},
     {{ +1, +1, +0 }, { +1, +1 }},
     {{ -1, +1, +0 }, { +1, +0 }},
     {{ -1, -1, +0 }, { +0, +0 }},
-#endif
     // flip source image vertically, the rotate 90 degrees clock-wise
-#if SKIP_FLUSH
-    {{ +1, -1, +0 }, { +1, +1 }},
-    {{ +1, +1, +0 }, { +0, +1 }},
-    {{ -1, +1, +0 }, { +0, +0 }},
-    {{ -1, -1, +0 }, { +1, +0 }},
-#else
     {{ +1, -1, +0 }, { +1, +0 }},
     {{ +1, +1, +0 }, { +0, +0 }},
     {{ -1, +1, +0 }, { +0, +1 }},
     {{ -1, -1, +0 }, { +1, +1 }},
-#endif
-    {{ +1, -1, +0 }, { +1, +1 }}, // new
+    // flip horizontally skip flush
+    {{ +1, -1, +0 }, { +0, +1 }},
+    {{ +1, +1, +0 }, { +0, +0 }},
+    {{ -1, +1, +0 }, { +1, +0 }},
+    {{ -1, -1, +0 }, { +1, +1 }},
+    // flip vertically skip flush
+    {{ +1, -1, +0 }, { +1, +0 }},
+    {{ +1, +1, +0 }, { +1, +1 }},
+    {{ -1, +1, +0 }, { +0, +1 }},
+    {{ -1, -1, +0 }, { +0, +0 }},
+    // flip source image horizontally, the rotate 90 degrees clock-wise skip flush
+    {{ +1, -1, +0 }, { +0, +0 }},
     {{ +1, +1, +0 }, { +1, +0 }},
-    {{ -1, +1, +0 }, { +0, +0 }},
+    {{ -1, +1, +0 }, { +1, +1 }},
     {{ -1, -1, +0 }, { +0, +1 }},
+    // flip source image vertically, the rotate 90 degrees clock-wise skip flush
+    {{ +1, -1, +0 }, { +1, +1 }},
+    {{ +1, +1, +0 }, { +0, +1 }},
+    {{ -1, +1, +0 }, { +0, +0 }},
+    {{ -1, -1, +0 }, { +1, +0 }},
 };
 
 // Vertex indices for predefined rotation angles.
 const GLubyte kIndices[] = {
-    0, 1, 2, 2, 3, 0,      // 0
-    4, 5, 6, 6, 7, 4,      // 90
-    8, 9, 10, 10, 11, 8,   // 180
-    12, 13, 14, 14, 15, 12, // 270
-    16, 17, 18 ,18, 19, 16, // flip h
+    0, 1, 2 , 2, 3, 0, // flip h
+    4, 5, 6, 6, 7, 4, // flip v
+    8, 9, 10, 10, 11, 8, // flip h, 90
+    12, 13, 14, 14, 15, 12, // flip v, 90
+    // skip flush
+    16, 17, 18, 18, 19, 16, // flip h
     20, 21, 22, 22, 23, 20, // flip v
     24, 25, 26, 26, 27, 24, // flip h, 90
     28, 29, 30, 30, 31, 28, // flip v, 90
-    32, 33, 34, 34, 35, 32
 };
 
 const GLint kIndicesLen = sizeof(kIndices) / sizeof(kIndices[0]);
@@ -274,7 +249,7 @@ TextureDraw::TextureDraw() :
 }
 
 bool TextureDraw::drawImpl(GLuint texture, float rotation,
-                           float dx, float dy, bool wantOverlay) {
+                           float dx, float dy, bool wantOverlay, bool skipFlush) {
     std::lock_guard<std::mutex> curLock(g_mutex);
     if (!mProgram) {
         ERR("%s: no program\n", __FUNCTION__);
@@ -368,20 +343,20 @@ bool TextureDraw::drawImpl(GLuint texture, float rotation,
     intptr_t indexShift = 0;
     switch (intRotation) {
     case 0:
-        indexShift = 5 * kIndicesPerDraw;
+        indexShift = 1 * kIndicesPerDraw;
         break;
     case 1:
-        indexShift = 7 * kIndicesPerDraw;
+        indexShift = 3 * kIndicesPerDraw;
         break;
     case 2:
-        indexShift = 4 * kIndicesPerDraw;
+        indexShift = 0 * kIndicesPerDraw;
         break;
     case 3:
-        indexShift = 6 * kIndicesPerDraw;
+        indexShift = 2 * kIndicesPerDraw;
         break;
-    case 4:
-        indexShift = 8 * kIndicesPerDraw;
-        break;
+    }
+    if (skipFlush) {
+        indexShift += 4 * kIndicesPerDraw;
     }
     s_gles2.glDrawElements(GL_TRIANGLES, kIndicesPerDraw, GL_UNSIGNED_BYTE,
                            (const GLvoid*)indexShift);

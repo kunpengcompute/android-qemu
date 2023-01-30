@@ -110,14 +110,19 @@ set(EMUANDROIDBASE_FILES
     ${FILE_PREFIX}/android/android-emu/android/base/StringView.cpp
     ${FILE_PREFIX}/android/android-emu/android/emulation/HostmemIdMapping.cpp
 )
-
 add_compile_options(-DVMICLIENT=1)
+
 if(REMOTE_RENDER)
+message(STATUS "-----------------LINUX BUILD-----------------")
 add_definitions(-DREMOTE_RENDER=1)
-endif()
 add_library(EmuGLRender SHARED ${GLESV2DEC_FILES} ${GLESDISPATCH_FILES}
     ${EMUGL_INTERFACE_FILES} ${OPENGLRENDER_VULKAN_FILES} ${OPENGLRENDER_FILES} ${OPENGLCODECOMMON_FILES} ${GLSNAPSHOT_FILES}
     ${EMUANDROIDBASE_FILES})
+else()
+add_library(EmuGLRender SHARED ${GLESV2DEC_FILES} ${GLESDISPATCH_FILES}
+    ${EMUGL_INTERFACE_FILES} ${OPENGLRENDER_VULKAN_FILES} ${OPENGLRENDER_FILES} ${OPENGLCODECOMMON_FILES} ${GLSNAPSHOT_FILES}
+    ${EMUANDROIDBASE_FILES})
+endif()
 
 target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/include)
 target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/android/android-emu)
@@ -136,7 +141,6 @@ target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/android/android-emu
 target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/android/android-emugl/host/libs/libOpenglRender/vulkan/cereal)
 target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/android/android-emugl/host/libs/Translator/include)
 target_include_directories(EmuGLRender PUBLIC ${FILE_PREFIX}/android/android-emugl/shared/OpenglCodecCommon)
-
 
 if(ANDROID_ABI STREQUAL "arm64-v8a")
 target_link_libraries(EmuGLRender log)

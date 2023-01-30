@@ -90,7 +90,7 @@ public:
         android::base::Pool* pool,
         const VkInstanceCreateInfo* pCreateInfo,
         const VkAllocationCallbacks* pAllocator,
-        VkInstance* pBoxedInstance);
+        VkInstance* pInstance);
 
     void on_vkDestroyInstance(
         android::base::Pool* pool,
@@ -101,7 +101,7 @@ public:
         android::base::Pool* pool,
         VkInstance instance,
         uint32_t* physicalDeviceCount,
-        VkPhysicalDevice* boxedPhysicalDevices);
+        VkPhysicalDevice* physicalDevices);
 
     // Override features
     void on_vkGetPhysicalDeviceFeatures(
@@ -747,14 +747,14 @@ LIST_TRANSFORMED_TYPES(DEFINE_TRANSFORMED_TYPE_PROTOTYPE)
 
     // boxed handles
 #define DEFINE_BOXED_DISPATCHABLE_HANDLE_API_DECL(type) \
-    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch, type boxed = VK_NULL_HANDLE); \
+    type new_boxed_##type(type underlying, VulkanDispatch* dispatch, bool ownDispatch); \
     void delete_boxed_##type(type boxed); \
     type unbox_##type(type boxed); \
     type unboxed_to_boxed_##type(type boxed); \
     VulkanDispatch* dispatch_##type(type boxed); \
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_API_DECL(type) \
-    type new_boxed_non_dispatchable_##type(type underlying, type boxed = VK_NULL_HANDLE); \
+    type new_boxed_non_dispatchable_##type(type underlying); \
     void delete_boxed_non_dispatchable_##type(type boxed); \
     type unbox_non_dispatchable_##type(type boxed); \
     type unboxed_to_boxed_non_dispatchable_##type(type boxed); \
@@ -775,7 +775,7 @@ private:
 GOLDFISH_VK_LIST_DISPATCHABLE_HANDLE_TYPES(DEFINE_BOXED_DISPATCHABLE_HANDLE_GLOBAL_API_DECL)
 
 #define DEFINE_BOXED_NON_DISPATCHABLE_HANDLE_GLOBAL_API_DECL(type) \
-    type new_boxed_non_dispatchable_##type(type underlying, type boxed = VK_NULL_HANDLE); \
+    type new_boxed_non_dispatchable_##type(type underlying); \
     void delete_boxed_non_dispatchable_##type(type boxed); \
     type unbox_non_dispatchable_##type(type boxed); \
     type unboxed_to_boxed_non_dispatchable_##type(type boxed); \

@@ -43,12 +43,12 @@ public:
     // coordinate space; only supported values are 0, 90, 180, 270). |dx,dy| is
     // the translation of the image towards the origin.
     bool draw(GLuint texture, float rotationDegrees, float dx, float dy) {
-        return drawImpl(texture, rotationDegrees, dx, dy, false);
+        return drawImpl(texture, rotationDegrees, dx, dy, false, false);
     }
     // Same as 'draw()', but if an overlay has been provided, that overlay is
     // drawn on top of everything else.
-    bool drawWithOverlay(GLuint texture, float rotationDegrees, float dx, float dy) {
-        return drawImpl(texture, rotationDegrees, dx, dy, true);
+    bool drawWithOverlay(GLuint texture, float rotationDegrees, float dx, float dy, bool isSkipFlush) {
+        return drawImpl(texture, rotationDegrees, dx, dy, true, isSkipFlush);
     }
 
     void setScreenMask(int width, int height, const unsigned char* rgbaData);
@@ -58,7 +58,7 @@ public:
     void cleanupForDrawLayer();
 
 private:
-    bool drawImpl(GLuint texture, float rotationDegrees, float dx, float dy, bool wantOverlay);
+    bool drawImpl(GLuint texture, float rotationDegrees, float dx, float dy, bool wantOverlay, bool skipFlush);
 
     GLuint mVertexShader;
     GLuint mFragmentShader;

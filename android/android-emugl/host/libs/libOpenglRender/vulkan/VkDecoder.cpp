@@ -205,7 +205,7 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream)
                 }
                 if (m_logCalls)
                 {
-                    INFO("stream %p: call vkCreateInstance 0x%llx 0x%llx 0x%llx \n", ioStream, (unsigned long long)pCreateInfo, (unsigned long long)pAllocator, (unsigned long long)*pInstance);
+                    INFO("stream %p: call vkCreateInstance 0x%llx 0x%llx 0x%llx \n", ioStream, (unsigned long long)pCreateInfo, (unsigned long long)pAllocator, (unsigned long long)pInstance);
                 }
                 VkResult vkCreateInstance_VkResult_return = (VkResult)0;
                 vkCreateInstance_VkResult_return = m_state->on_vkCreateInstance(&m_pool, pCreateInfo, pAllocator, pInstance);
@@ -213,6 +213,9 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream)
                 uint64_t cgen_var_2;
                 static_assert(8 == sizeof(VkInstance), "handle map overwrite requres VkInstance to be 8 bytes long");
                 vkStream->handleMapping()->mapHandles_VkInstance((VkInstance*)pInstance, 1);
+                vkStream->write((VkInstance*)pInstance, 8 * 1);
+                vkStream->write(&vkCreateInstance_VkResult_return, sizeof(VkResult));
+                vkStream->commitWrite();
                 size_t snapshotTraceBytes = vkReadStream->endTrace();
                 if (m_state->snapshotsEnabled())
                 {
@@ -311,15 +314,29 @@ size_t VkDecoder::Impl::decode(void* buf, size_t len, IOStream* ioStream)
                 VkResult vkEnumeratePhysicalDevices_VkResult_return = (VkResult)0;
                 vkEnumeratePhysicalDevices_VkResult_return = m_state->on_vkEnumeratePhysicalDevices(&m_pool, instance, pPhysicalDeviceCount, pPhysicalDevices);
                 vkStream->unsetHandleMapping();
-
+                // WARNING PTR CHECK
+                uint64_t cgen_var_9 = (uint64_t)(uintptr_t)pPhysicalDeviceCount;
+                vkStream->putBe64(cgen_var_9);
+                if (pPhysicalDeviceCount)
+                {
+                    vkStream->write((uint32_t*)pPhysicalDeviceCount, sizeof(uint32_t));
+                }
+                // WARNING PTR CHECK
+                uint64_t cgen_var_10 = (uint64_t)(uintptr_t)pPhysicalDevices;
+                vkStream->putBe64(cgen_var_10);
                 if (pPhysicalDevices)
                 {
                     if ((*(pPhysicalDeviceCount)))
                     {
+                        uint64_t* cgen_var_11;
+                        vkStream->alloc((void**)&cgen_var_11, (*(pPhysicalDeviceCount)) * 8);
                         static_assert(8 == sizeof(VkPhysicalDevice), "handle map overwrite requres VkPhysicalDevice to be 8 bytes long");
                         vkStream->handleMapping()->mapHandles_VkPhysicalDevice((VkPhysicalDevice*)pPhysicalDevices, (*(pPhysicalDeviceCount)));
+                        vkStream->write((VkPhysicalDevice*)pPhysicalDevices, 8 * (*(pPhysicalDeviceCount)));
                     }
                 }
+                vkStream->write(&vkEnumeratePhysicalDevices_VkResult_return, sizeof(VkResult));
+                vkStream->commitWrite();
                 size_t snapshotTraceBytes = vkReadStream->endTrace();
                 if (m_state->snapshotsEnabled())
                 {

@@ -18,34 +18,11 @@
 #include <set>
 #include <mutex>
 
-#ifdef REMOTE_RENDER
-std::function<void(int width, int height)> EncoderGLInterface::initEncoder = nullptr;
-std::function<void()> EncoderGLInterface::encodeTex = nullptr;
-std::function<void(uint32_t *texture, uint32_t *target)> EncoderGLInterface::getEncodeTex = nullptr;
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef REMOTE_RENDER
-void SetInitEncoder(std::function<void(int width, int height)> func)
-{
-    EncoderGLInterface::initEncoder = func;
-}
-
-void SetEncodeTex(std::function<void()> func)
-{
-    EncoderGLInterface::encodeTex = func;
-}
-
-void SetGetEncodeTex(std::function<void(uint32_t *texture, uint32_t *target)> func)
-{
-    EncoderGLInterface::getEncodeTex = func;
-}
-#endif
-
-void *CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
+void* CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
 {
     RenderThreadInfo *threadInfo = nullptr;
     threadInfo = new (std::nothrow) RenderThreadInfo(pid, tid);
@@ -59,24 +36,12 @@ void *CreateGLESv2Decoder(uint32_t pid, uint32_t tid)
     return &threadInfo->m_gl2Dec;
 }
 
-void DestoryGLESv2Decoder(void *self)
-{
-    FrameBuffer::getFB()->resetTextureBindImages();
-    // 将当前线程持有的context与此线程解绑，保证客户端退出时删除此context时可正常释放资源
-    FrameBuffer::getFB()->bindContext(0, 0, 0);
-    RenderThreadInfo *curThread = RenderThreadInfo::get();
-    if (curThread != nullptr) {
-        INFO("pid:%u tid:%u is deconstruction", curThread->m_pid, curThread->m_tid);
-        delete curThread;
-    }
-}
-
 void rcExitRenderThread()
 {
     FrameBuffer::getFB()->bindContext(0, 0, 0);
     FrameBuffer::getFB()->drainWindowSurface();
     FrameBuffer::getFB()->drainRenderContext();
-    RenderThreadInfo *curThread = RenderThreadInfo::get();
+    RenderThreadInfo* curThread = RenderThreadInfo::get();
     int needCleanPid = 0;
     if (FrameBuffer::getFB()->deleteThread(curThread->m_pid)) {
         needCleanPid = curThread->m_pid;
@@ -88,23 +53,30 @@ void rcExitRenderThread()
     }
 }
 
+void DestoryGLESv2Decoder(void* self)
+{
+    FrameBuffer::getFB()->resetTextureBindImages();
+    rcExitRenderThread();
+    RenderThreadInfo* curThread = RenderThreadInfo::get();
+    if (curThread != nullptr) {
+        INFO("pid:%u tid:%u is deconstruction", curThread->m_pid, curThread->m_tid);
+        delete curThread;
+    }
+}
+
 void SetDeleteColorbufferCallBack(DeleteColorbufferFunc deleteColorbufferFunc)
 {
     FrameBuffer::setDeleteColorbufferCallBack(deleteColorbufferFunc);
 }
 
-using WriteEncDataFunc = bool (*)(const uint8_t *, uint32_t);
-void SetWriteEncDataCallBack(WriteEncDataFunc /*writeEncDataFunc*/)
-{}
-
-#define GET_ADDRESS(func)                           \
-void *GetAddress_##func(void *self)                 \
-{                                                   \
-    GLESv2Decoder *ctx = (GLESv2Decoder *)self;     \
-    if (ctx == nullptr) {                           \
-        return nullptr;                             \
-    }                                               \
-    return (void *)(ctx->func);                     \
+#define GET_ADDRESS(func) \
+void* GetAddress_##func(void* self) \
+{ \
+    GLESv2Decoder* ctx = (GLESv2Decoder*) self; \
+    if (ctx == nullptr) { \
+        return nullptr; \
+    } \
+    return (void *)(ctx->func); \
 }
 
 GET_ADDRESS(glActiveTexture);
@@ -565,6 +537,7 @@ GET_ADDRESS(glDrawElementsInstancedBaseVertexOffsetAEMU);
 GET_ADDRESS(glGetnUniformfv);
 GET_ADDRESS(glGetnUniformiv);
 GET_ADDRESS(glGetnUniformuiv);
+GET_ADDRESS(glBindFramebufferAEMU);
 
 std::unique_ptr<RenderWindow> g_renderWindow = nullptr;
 
@@ -574,15 +547,16 @@ enum WindowControlRetCode : uint32_t {
     WINDOW_CONTROL_ALREADY_INITED = 0x0A050002,
 };
 
-int Initialize(unsigned int width, unsigned int height, bool useThread, bool useSubWindow)
+int Initialize(unsigned int width, unsigned int height, bool useThread,
+                           bool useSubWindow)
 {
     if (g_renderWindow != nullptr) {
         ERR("render window already initialize");
         return WINDOW_CONTROL_ALREADY_INITED;
     }
     INFO("width:%u, height:%u", width, height);
-    g_renderWindow =
-        std::unique_ptr<RenderWindow>(new (std::nothrow) RenderWindow(width, height, useThread, useSubWindow));
+    g_renderWindow = std::unique_ptr<RenderWindow>(new (std::nothrow) RenderWindow(width, height,
+        useThread, useSubWindow));
     if (g_renderWindow == nullptr) {
         ERR("error: initialize render window failed");
         return WINDOW_CONTROL_INIT_FAILED;
