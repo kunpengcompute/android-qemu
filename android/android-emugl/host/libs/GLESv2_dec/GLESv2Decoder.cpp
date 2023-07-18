@@ -163,6 +163,7 @@ int GLESv2Decoder::initGL(get_proc_func_t getProcFunc, void *getProcFuncData)
     glDrawElementsInstancedBaseVertexDataAEMU = s_glDrawElementsInstancedBaseVertexDataAEMU;
     glDrawElementsInstancedBaseVertexOffsetAEMU = s_glDrawElementsInstancedBaseVertexOffsetAEMU;
     glBindFramebufferAEMU = s_glBindFramebufferAEMU;
+    glUniformMatrix4fvAEMU = s_glUniformMatrix4fvAEMU;
 
     OVERRIDE_DEC(glCreateShader)
     OVERRIDE_DEC(glCreateProgram)
@@ -313,10 +314,13 @@ void GLESv2Decoder::s_glVertexAttribPointerData(void *self, GLuint indx, GLint s
                 GLint location = ctx->glGetAttribLocation(curProgram, "texCoords");
                 if (indx == location) {
                     float* oldData = (float *)(data);
-                    oldData[0 * 2 + 1] = 1.0 - oldData[0 * 2 + 1];
-                    oldData[1 * 2 + 1] = 1.0 - oldData[1 * 2 + 1];
-                    oldData[2 * 2 + 1] = 1.0 - oldData[2 * 2 + 1];
-                    oldData[3 * 2 + 1] = 1.0 - oldData[3 * 2 + 1];
+                    auto calTurnPos = [tInfo](float pos) -> float {
+                        return (1.0 - pos * tInfo->m_surfaceFlingerTex11 - 2 * tInfo->m_surfaceFlingerTex31) / tInfo->m_surfaceFlingerTex11;
+                    };
+                    oldData[0 * 2 + 1] = calTurnPos(oldData[0 * 2 + 1]);
+                    oldData[1 * 2 + 1] = calTurnPos(oldData[1 * 2 + 1]);
+                    oldData[2 * 2 + 1] = calTurnPos(oldData[2 * 2 + 1]);
+                    oldData[3 * 2 + 1] = calTurnPos(oldData[3 * 2 + 1]);
                 }
             }
         }
@@ -1024,4 +1028,27 @@ void GLESv2Decoder::s_glBindFramebufferAEMU(void* self, GLenum target, GLuint fr
     GLESv2Decoder *ctx = (GLESv2Decoder *)self;
     FrameBuffer::getFB()->bindFramebuffer(target, framebuffer);
     ctx->glBindFramebuffer(target, framebuffer);
+}
+
+void GLESv2Decoder::s_glUniformMatrix4fvAEMU(void *self, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)
+{
+    GLESv2Decoder *ctx = (GLESv2Decoder *)self;
+#if SKIP_FLUSH
+        RenderThreadInfo* tInfo = RenderThreadInfo::get();
+        if (tInfo != nullptr && tInfo->m_isSurfaceFlinger && tInfo->m_isNeedChange) {
+            if (count == 1) {
+                GLint curProgram = 0;
+                ctx->glGetIntegerv(GL_CURRENT_PROGRAM, &curProgram);
+                GLint texLocation = ctx->glGetUniformLocation(curProgram, "texture");
+                if (location == texLocation) {
+                    // 此处不会越界，glUniformMatrix4fv约定了value中必须有4 * 4个float
+                    // 其中：m_surfaceFlingerTex11存储texture纹理坐标的[1][1]，坐标位置为：1 * 4 + 1
+                    // m_surfaceFlingerTex31存储texture纹理坐标的[3][1]，坐标位置为：3 * 4 + 1
+                    tInfo->m_surfaceFlingerTex11 = value[5];
+                    tInfo->m_surfaceFlingerTex31 = value[13];
+                }
+            }
+        }
+#endif
+    ctx->glUniformMatrix4fv(location, count, transpose, value);
 }

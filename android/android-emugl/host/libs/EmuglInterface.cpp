@@ -538,6 +538,7 @@ GET_ADDRESS(glGetnUniformfv);
 GET_ADDRESS(glGetnUniformiv);
 GET_ADDRESS(glGetnUniformuiv);
 GET_ADDRESS(glBindFramebufferAEMU);
+GET_ADDRESS(glUniformMatrix4fvAEMU);
 
 std::unique_ptr<RenderWindow> g_renderWindow = nullptr;
 

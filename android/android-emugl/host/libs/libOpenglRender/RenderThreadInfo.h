@@ -74,6 +74,9 @@ struct RenderThreadInfo {
     bool m_isNeedChange = false;
     bool m_isSurfaceFlinger = false;
     bool m_isFlushIng = false;
+    // 记录SurfaceFlinger合成时Uniform texture纹理坐标，修复钉钉弹出服务协议窗口错位问题
+    float m_surfaceFlingerTex11 = 0.0f; // 存储SurfaceFlinger合成时Uniform texture纹理坐标的[1][1]
+    float m_surfaceFlingerTex31 = 0.0f; // 存储SurfaceFlinger合成时Uniform texture纹理坐标的[3][1]
     ColorBufferPtr m_surfaceFingerFboColorbuffer = nullptr; // AOSP11 SurfaceFlinger使用FBO对象渲染关联的Colorbuffer
     std::deque<ColorBufferPtr> m_colorbuffers;
     EGLImageKHR m_curBindImages = EGL_NO_IMAGE_KHR;

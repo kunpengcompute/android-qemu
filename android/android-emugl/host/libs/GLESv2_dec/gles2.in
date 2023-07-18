@@ -623,3 +623,4 @@ GL_ENTRY(void, glGetnUniformfv, GLuint program, GLint location, GLsizei bufSize,
 GL_ENTRY(void, glGetnUniformiv, GLuint program, GLint location, GLsizei bufSize, GLint *params)
 GL_ENTRY(void, glGetnUniformuiv, GLuint program, GLint location, GLsizei bufSize, GLuint *params)
 GL_ENTRY(void, glBindFramebufferAEMU, GLenum target, GLuint framebuffer)
+GL_ENTRY(void, glUniformMatrix4fvAEMU, GLint location, GLsizei count, GLboolean transpose, const GLfloat* value)
